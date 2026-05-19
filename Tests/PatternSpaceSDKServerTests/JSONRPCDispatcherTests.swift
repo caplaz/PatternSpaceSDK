@@ -38,7 +38,7 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
                    bitDepth: 10, hdrMode: "SDR", refreshRate: 60, outputRange: "full")
     }
     func deviceStatus() async throws -> DeviceStatus {
-        DeviceStatus(currentPatternId: nil, connectedClients: 1, sourceActive: isSourceActive)
+        DeviceStatus(currentPatternId: nil, sourceActive: isSourceActive)
     }
 }
 

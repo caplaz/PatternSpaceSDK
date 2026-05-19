@@ -241,13 +241,15 @@ Returns static device information such as name, resolution, color format, bit de
 
 ### `device.status`
 
-Returns current status, including active pattern id, connected client count, and whether the JSON source is active.
+Returns current status, including active pattern id and whether the JSON source is active.
 
 ## Notifications
 
 ### `connectionReady`
 
 Sent after a successful WebSocket upgrade.
+
+The server accepts one client at a time. A new successful WebSocket upgrade drops any existing client before `connectionReady` is sent to the new client.
 
 ### `pattern.changed`
 

@@ -11,7 +11,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private let token: String?
     private let upgradeHandler: WebSocketUpgradeHandler
     private let dispatcher: JSONRPCDispatcher
-    private let buildConnectionReady: (Bool, Int) -> ConnectionReadyParams
+    private let buildConnectionReady: (Bool) -> ConnectionReadyParams
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private let lock = NSLock()
@@ -22,9 +22,10 @@ public final class PatternSpaceServer: @unchecked Sendable {
     ///   - token: Optional bearer token required for WebSocket upgrades.
     ///   - delegate: Host app delegate that performs validated operations.
     ///   - connectionReady: Builds the initial device snapshot for new clients.
+    ///     New clients evict any existing client before this notification is sent.
     public init(token: String?,
                 delegate: any PatternSpaceServerDelegate,
-                connectionReady: @escaping (Bool, Int) -> ConnectionReadyParams) {
+                connectionReady: @escaping (Bool) -> ConnectionReadyParams) {
         self.token = token
         self.upgradeHandler = WebSocketUpgradeHandler(token: token)
         self.dispatcher = JSONRPCDispatcher(delegate: delegate)
@@ -86,8 +87,9 @@ public final class PatternSpaceServer: @unchecked Sendable {
             },
             onUpgraded: { [weak self] client in
                 guard let self else { return }
-                let count = self.clientCount()
-                let params = self.buildConnectionReady(authenticated, count)
+                let evicted = self.registerAndEvictExisting(client)
+                evicted.forEach { $0.close() }
+                let params = self.buildConnectionReady(authenticated)
                 self.sendConnectionReady(params, to: client)
             },
             onClosed: { [weak self] client in
@@ -95,23 +97,22 @@ public final class PatternSpaceServer: @unchecked Sendable {
             }
         )
 
-        lock.lock()
-        clients[ObjectIdentifier(client)] = client
-        lock.unlock()
-
         client.start()
+    }
+
+    private func registerAndEvictExisting(_ client: ClientConnection) -> [ClientConnection] {
+        lock.lock()
+        let newID = ObjectIdentifier(client)
+        let evicted = clients.filter { $0.key != newID }.map(\.value)
+        clients = [newID: client]
+        lock.unlock()
+        return evicted
     }
 
     private func remove(_ client: ClientConnection) {
         lock.lock()
         clients.removeValue(forKey: ObjectIdentifier(client))
         lock.unlock()
-    }
-
-    private func clientCount() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return clients.count
     }
 
     private func sendConnectionReady(_ params: ConnectionReadyParams, to client: ClientConnection) {

@@ -4,6 +4,23 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.2.1] - 2026-05-19
+
+### Breaking changes
+
+- `DeviceStatus`, `DeviceSnapshot`, and `ConnectionReadyParams` no longer include `connectedClients`. `PatternSpaceServer` enforces single-client behavior unconditionally, so the count carried no useful information for callers.
+- Changed `PatternSpaceServer.init(token:delegate:connectionReady:)` so the `connectionReady` closure receives only `authenticated`; the previous `(Bool, Int) -> ConnectionReadyParams` closure is now `(Bool) -> ConnectionReadyParams`.
+
+### Behavioral changes
+
+- New WebSocket connections unconditionally drop any existing client before sending `connectionReady`.
+- `sourceActive` in `DeviceStatus`, `DeviceSnapshot`, and `ConnectionReadyParams` is documented as a race-condition guard. In normal operation, source deactivation closes the socket.
+
+### No changes
+
+- JSON-RPC framing, auth handshake, method catalog, error codes, and protocol version remain unchanged.
+- `PatternSpaceSDKClient` API is unchanged.
+
 ## [0.2.0] - 2026-05-18
 
 ### Changed

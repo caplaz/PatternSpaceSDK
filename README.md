@@ -1,6 +1,6 @@
 # PatternSpaceSDK
 
-Swift SDK for controlling PatternSpace over its JSON WebSocket protocol.
+WebSocket JSON-RPC SDK for PatternSpace integration.
 
 PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying device state, and receiving live status events.
 
@@ -21,6 +21,7 @@ PatternSpaceSDK gives calibration tools and automation clients a typed Swift int
 - Swift 5.9+
 - macOS 12+
 - iOS 15+
+- PatternSpace JSON protocol `1.0`
 
 ## Installation
 
@@ -40,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.1.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.2.1")
     ],
     targets: [
         .executableTarget(
@@ -137,7 +138,7 @@ final class Delegate: PatternSpaceServerDelegate {
     }
 
     func deviceStatus() async throws -> DeviceStatus {
-        DeviceStatus(currentPatternId: nil, connectedClients: 0, sourceActive: true)
+        DeviceStatus(currentPatternId: nil, sourceActive: true)
     }
 
     var isSourceActive: Bool { true }
@@ -147,7 +148,7 @@ let delegate = Delegate()
 let server = PatternSpaceServer(
     token: "your-token",
     delegate: delegate,
-    connectionReady: { authenticated, clientCount in
+    connectionReady: { authenticated in
         ConnectionReadyParams(
             protocolVersion: "1.0",
             name: "PatternSpace",
@@ -158,7 +159,6 @@ let server = PatternSpaceServer(
             refreshRate: 60,
             outputRange: "full",
             currentPatternId: nil,
-            connectedClients: clientCount,
             sourceActive: true,
             authenticated: authenticated,
         )
@@ -167,6 +167,8 @@ let server = PatternSpaceServer(
 
 try server.start(port: 7878, deviceName: "PatternSpace")
 ```
+
+`PatternSpaceServer` is single-client by design. When a new WebSocket upgrade succeeds, the server drops any existing client before sending `connectionReady` to the new one.
 
 ## Authentication
 
@@ -177,6 +179,8 @@ Authorization: Bearer <token>
 ```
 
 The server rejects unauthorized upgrade requests with HTTP `401 Unauthorized` before accepting the WebSocket. Token comparison is constant-time. Prefer a high-entropy per-device token stored in the platform keychain or another secure credential store.
+
+Pass `nil` for the server token to run in insecure mode. Insecure mode should be limited to trusted local networks or test harnesses.
 
 ## Protocol
 
@@ -212,6 +216,8 @@ Notifications:
 - `device.statusChanged`
 
 See [Documentation](Documentation/Protocol.md) for the wire-format overview.
+
+The `sourceActive` field is a race-condition guard. In normal PatternSpace operation, changing away from the JSON source stops the server and closes the socket rather than keeping a client connected with `sourceActive: false`.
 
 ## Development
 

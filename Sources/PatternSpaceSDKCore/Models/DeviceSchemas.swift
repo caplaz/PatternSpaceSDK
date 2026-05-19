@@ -50,16 +50,12 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
     /// Identifier of the currently displayed pattern, if any.
     public let currentPatternId: String?
 
-    /// Number of connected JSON protocol clients.
-    public let connectedClients: Int
-
     /// Whether the JSON protocol source is active in the app.
     public let sourceActive: Bool
 
     /// Creates a runtime status value.
-    public init(currentPatternId: String?, connectedClients: Int, sourceActive: Bool) {
+    public init(currentPatternId: String?, sourceActive: Bool) {
         self.currentPatternId = currentPatternId
-        self.connectedClients = connectedClients
         self.sourceActive = sourceActive
     }
 }
@@ -90,20 +86,17 @@ public struct DeviceSnapshot: Codable, Sendable, Equatable {
     /// Identifier of the currently displayed pattern, if any.
     public let currentPatternId: String?
 
-    /// Number of connected JSON protocol clients.
-    public let connectedClients: Int
-
     /// Whether the JSON protocol source is active in the app.
     public let sourceActive: Bool
 
     /// Creates a full device state snapshot.
     public init(name: String, resolution: Resolution, colorFormat: String,
                 bitDepth: Int, hdrMode: String, refreshRate: Int, outputRange: String,
-                currentPatternId: String?, connectedClients: Int, sourceActive: Bool) {
+                currentPatternId: String?, sourceActive: Bool) {
         self.name = name; self.resolution = resolution; self.colorFormat = colorFormat
         self.bitDepth = bitDepth; self.hdrMode = hdrMode; self.refreshRate = refreshRate
         self.outputRange = outputRange; self.currentPatternId = currentPatternId
-        self.connectedClients = connectedClients; self.sourceActive = sourceActive
+        self.sourceActive = sourceActive
     }
 }
 
@@ -136,9 +129,6 @@ public struct ConnectionReadyParams: Codable, Sendable {
     /// Identifier of the currently displayed pattern, if any.
     public let currentPatternId: String?
 
-    /// Number of connected JSON protocol clients.
-    public let connectedClients: Int
-
     /// Whether the JSON protocol source is active in the app.
     public let sourceActive: Bool
 
@@ -149,11 +139,11 @@ public struct ConnectionReadyParams: Codable, Sendable {
     public init(protocolVersion: String, name: String, resolution: Resolution,
                 colorFormat: String, bitDepth: Int, hdrMode: String,
                 refreshRate: Int, outputRange: String, currentPatternId: String?,
-                connectedClients: Int, sourceActive: Bool, authenticated: Bool) {
+                sourceActive: Bool, authenticated: Bool) {
         self.protocolVersion = protocolVersion; self.name = name; self.resolution = resolution
         self.colorFormat = colorFormat; self.bitDepth = bitDepth; self.hdrMode = hdrMode
         self.refreshRate = refreshRate; self.outputRange = outputRange
-        self.currentPatternId = currentPatternId; self.connectedClients = connectedClients
-        self.sourceActive = sourceActive; self.authenticated = authenticated
+        self.currentPatternId = currentPatternId; self.sourceActive = sourceActive
+        self.authenticated = authenticated
     }
 }
