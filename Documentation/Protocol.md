@@ -65,17 +65,6 @@ Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients re
 
 ## Methods
 
-### `pattern.display`
-
-Displays a named pattern by id.
-
-```json
-{
-  "id": "color/red",
-  "params": {}
-}
-```
-
 ### `pattern.displayColor`
 
 Displays a full-screen RGB color.
@@ -123,6 +112,17 @@ Lists available patterns, optionally filtered by category and subcategory.
 {
   "category": "color",
   "subcategory": "primary"
+}
+```
+
+### `pattern.display`
+
+Displays a named pattern by id.
+
+```json
+{
+  "id": "color/red",
+  "params": {}
 }
 ```
 
