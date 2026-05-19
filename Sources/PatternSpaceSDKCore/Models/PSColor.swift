@@ -18,19 +18,48 @@ public enum BitDepth: Int, Codable, Sendable, CaseIterable {
     case sixteen = 16
 }
 
-public struct RectangleParams: Codable, Sendable, Equatable {
-    public let foreground: PSColor
+public struct NormalizedRectangle: Codable, Sendable, Equatable {
+    public let x: Double
+    public let y: Double
+    public let width: Double
+    public let height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct PatchRectangle: Codable, Sendable, Equatable {
+    public let color: PSColor
+    public let x: Double
+    public let y: Double
+    public let width: Double
+    public let height: Double
+
+    public init(color: PSColor, x: Double, y: Double, width: Double, height: Double) {
+        self.color = color
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    public init(color: PSColor, rectangle: NormalizedRectangle) {
+        self.init(color: color, x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height)
+    }
+}
+
+public struct PatchParams: Codable, Sendable, Equatable {
     public let background: PSColor
-    public let x: Int
-    public let y: Int
-    public let width: Int
-    public let height: Int
+    public let rectangles: [PatchRectangle]
     public let bitDepth: BitDepth
 
-    public init(foreground: PSColor, background: PSColor,
-                x: Int, y: Int, width: Int, height: Int, bitDepth: BitDepth) {
-        self.foreground = foreground; self.background = background
-        self.x = x; self.y = y; self.width = width; self.height = height
+    public init(background: PSColor, rectangles: [PatchRectangle], bitDepth: BitDepth) {
+        self.background = background
+        self.rectangles = rectangles
         self.bitDepth = bitDepth
     }
 }

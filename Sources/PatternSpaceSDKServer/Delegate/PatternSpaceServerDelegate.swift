@@ -9,7 +9,7 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
 
     func displayPattern(id: String) async throws
     func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws
-    func displayRectangle(_ params: RectangleParams) async throws
+    func displayPatch(_ params: PatchParams) async throws
     func clearDisplay() async throws
 
     // MARK: Read — always invoked
@@ -24,6 +24,4 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Returns true when the JSON source is the currently selected PatternSourceSelection.
     var isSourceActive: Bool { get }
 
-    /// Current display resolution — used for rectangle bounds validation.
-    var currentResolution: Resolution { get }
 }

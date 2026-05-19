@@ -81,7 +81,14 @@ Task {
     }
 }
 
-try await client.pattern.displayColor(PSColor(r: 1, g: 0, b: 0), bitDepth: .ten)
+try await client.pattern.displayColor(PSColor(r: 1, g: 0, b: 0), bitDepth: .ten, size: 10)
+try await client.pattern.displayPatch(
+    background: PSColor(r: 0, g: 0, b: 0),
+    rectangles: [
+        PatchRectangle(color: PSColor(r: 1, g: 1, b: 1), x: 0.25, y: 0.25, width: 0.5, height: 0.5)
+    ],
+    bitDepth: .ten
+)
 try await client.pattern.clear()
 client.disconnect()
 ```
@@ -101,8 +108,8 @@ final class Delegate: PatternSpaceServerDelegate {
         print("Display color", color, bitDepth)
     }
 
-    func displayRectangle(_ params: RectangleParams) async throws {
-        print("Display rectangle", params)
+    func displayPatch(_ params: PatchParams) async throws {
+        print("Display patch", params)
     }
 
     func clearDisplay() async throws {
@@ -114,7 +121,7 @@ final class Delegate: PatternSpaceServerDelegate {
     }
 
     func getPattern(id: String) async throws -> PatternInfo {
-        throw PSDispatchError(.notFound)
+        throw PSDispatchError(.patternNotFound)
     }
 
     func deviceInfo() async throws -> DeviceInfo {
@@ -134,7 +141,6 @@ final class Delegate: PatternSpaceServerDelegate {
     }
 
     var isSourceActive: Bool { true }
-    var currentResolution: Resolution { Resolution(width: 3840, height: 2160) }
 }
 
 let delegate = Delegate()
@@ -185,7 +191,7 @@ Supported method namespaces:
 Patch color methods:
 
 - `pattern.displayColor`
-- `pattern.displayRectangle`
+- `pattern.displayPatch`
 - `pattern.clear`
 
 Existing pattern list methods:

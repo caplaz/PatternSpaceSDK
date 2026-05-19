@@ -39,22 +39,40 @@ import PatternSpaceSDKCore
             try InputValidator.validateBitDepth(11)
         }
     }
-    @Test func validRectanglePasses() {
-        let res = Resolution(width: 3840, height: 2160)
+    @Test func validNormalizedRectanglePasses() {
         #expect(throws: Never.self) {
-            try InputValidator.validateRectangle(x: 0, y: 0, width: 1920, height: 1080, in: res)
+            try InputValidator.validateRectangle(x: 0.25, y: 0.25, width: 0.5, height: 0.5)
         }
     }
-    @Test func rectangleWidthZeroRejected() {
-        let res = Resolution(width: 3840, height: 2160)
+    @Test func normalizedRectangleWidthZeroRejected() {
         #expect(throws: PSDispatchError.self) {
-            try InputValidator.validateRectangle(x: 0, y: 0, width: 0, height: 1080, in: res)
+            try InputValidator.validateRectangle(x: 0, y: 0, width: 0, height: 0.5)
         }
     }
-    @Test func rectangleOutOfBoundsRejected() {
-        let res = Resolution(width: 1920, height: 1080)
+    @Test func normalizedRectangleOutOfBoundsRejected() {
         #expect(throws: PSDispatchError.self) {
-            try InputValidator.validateRectangle(x: 100, y: 0, width: 1900, height: 1080, in: res)
+            try InputValidator.validateRectangle(x: 0.75, y: 0, width: 0.5, height: 0.5)
+        }
+    }
+    @Test func normalizedRectangleNaNRejected() {
+        #expect(throws: PSDispatchError.self) {
+            try InputValidator.validateRectangle(x: Double.nan, y: 0, width: 0.5, height: 0.5)
+        }
+    }
+    @Test func displayColorSizeUsesCalMANAreaPercentage() throws {
+        let rect = try InputValidator.rectangleForCenteredPatch(sizePercent: 10)
+        #expect(abs(rect.x - 0.341886) < 0.0001)
+        #expect(abs(rect.y - 0.341886) < 0.0001)
+        #expect(abs(rect.width - 0.316227) < 0.0001)
+        #expect(abs(rect.height - 0.316227) < 0.0001)
+    }
+    @Test func displayColorSizeDefaultsToFullScreenWhenMissing() throws {
+        let rect = try InputValidator.rectangleForCenteredPatch(sizePercent: nil)
+        #expect(rect == NormalizedRectangle(x: 0, y: 0, width: 1, height: 1))
+    }
+    @Test func displayColorSizeAboveHundredRejected() {
+        #expect(throws: PSDispatchError.self) {
+            _ = try InputValidator.rectangleForCenteredPatch(sizePercent: 101)
         }
     }
     @Test func validPatternIdPasses() {

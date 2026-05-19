@@ -60,7 +60,7 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         switch method {
         case "pattern.display":          return try await handleDisplay(params)
         case "pattern.displayColor":     return try await handleDisplayColor(params)
-        case "pattern.displayRectangle": return try await handleDisplayRectangle(params)
+        case "pattern.displayPatch":     return try await handleDisplayPatch(params)
         case "pattern.clear":            return try await handleClear()
         case "pattern.list":             return try await handleList(params)
         case "pattern.get":              return try await handleGet(params)
@@ -96,32 +96,56 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         try InputValidator.validateBitDepth(bdInt)
         let bitDepth = BitDepth(rawValue: bdInt)!
         try requireSourceActive()
-        try await delegate?.displayColor(PSColor(r: r, g: g, b: b), bitDepth: bitDepth)
+        if let size = obj["size"]?.number {
+            let rect = try InputValidator.rectangleForCenteredPatch(sizePercent: size)
+            let patch = PatchParams(
+                background: PSColor(r: 0, g: 0, b: 0),
+                rectangles: [PatchRectangle(color: PSColor(r: r, g: g, b: b), rectangle: rect)],
+                bitDepth: bitDepth
+            )
+            try await delegate?.displayPatch(patch)
+        } else {
+            try await delegate?.displayColor(PSColor(r: r, g: g, b: b), bitDepth: bitDepth)
+        }
         return .object([:])
     }
 
-    private func handleDisplayRectangle(_ params: JSONValue?) async throws -> JSONValue {
+    private func handleDisplayPatch(_ params: JSONValue?) async throws -> JSONValue {
         let obj = params?.object ?? [:]
-        guard let fg = obj["foreground"]?.object,
-              let bg = obj["background"]?.object,
-              let fr = fg["r"]?.number, let fg_g = fg["g"]?.number, let fb = fg["b"]?.number,
+        guard let bg = obj["background"]?.object,
               let br = bg["r"]?.number, let bg_g = bg["g"]?.number, let bb = bg["b"]?.number,
-              let x = obj["x"]?.int, let y = obj["y"]?.int,
-              let w = obj["width"]?.int, let h = obj["height"]?.int,
+              let rectValues = obj["rectangles"]?.array,
               let bdInt = obj["bitDepth"]?.int else {
-            throw PSDispatchError(.invalidParams, message: "foreground, background, x, y, width, height, bitDepth are required")
+            throw PSDispatchError(.invalidParams, message: "background, rectangles, and bitDepth are required")
         }
-        try InputValidator.validateColor(r: fr, g: fg_g, b: fb)
         try InputValidator.validateColor(r: br, g: bg_g, b: bb)
         try InputValidator.validateBitDepth(bdInt)
+        try InputValidator.validateRectangleCount(rectValues.count)
         guard let bitDepth = BitDepth(rawValue: bdInt) else { throw PSDispatchError(.invalidBitDepth) }
-        let res = delegate?.currentResolution ?? Resolution(width: Int.max, height: Int.max)
-        try InputValidator.validateRectangle(x: x, y: y, width: w, height: h, in: res)
+
+        let rectangles = try rectValues.map { value -> PatchRectangle in
+            guard let obj = value.object,
+                  let colorObject = obj["color"]?.object,
+                  let r = colorObject["r"]?.number,
+                  let g = colorObject["g"]?.number,
+                  let b = colorObject["b"]?.number,
+                  let x = obj["x"]?.number,
+                  let y = obj["y"]?.number,
+                  let width = obj["width"]?.number,
+                  let height = obj["height"]?.number else {
+                throw PSDispatchError(.invalidParams, message: "each rectangle requires color, x, y, width, and height")
+            }
+            try InputValidator.validateColor(r: r, g: g, b: b)
+            try InputValidator.validateRectangle(x: x, y: y, width: width, height: height)
+            return PatchRectangle(color: PSColor(r: r, g: g, b: b), x: x, y: y, width: width, height: height)
+        }
+
         try requireSourceActive()
-        let rect = RectangleParams(foreground: PSColor(r: fr, g: fg_g, b: fb),
-                                   background: PSColor(r: br, g: bg_g, b: bb),
-                                   x: x, y: y, width: w, height: h, bitDepth: bitDepth)
-        try await delegate?.displayRectangle(rect)
+        try await delegate?.displayPatch(PatchParams(
+            background: PSColor(r: br, g: bg_g, b: bb),
+            rectangles: rectangles,
+            bitDepth: bitDepth
+        ))
         return .object([:])
     }
 

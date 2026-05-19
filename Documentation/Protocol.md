@@ -32,8 +32,11 @@ Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients re
   "id": 1,
   "method": "pattern.displayColor",
   "params": {
-    "color": { "r": 1.0, "g": 0.0, "b": 0.0 },
-    "bitDepth": 10
+    "r": 1.0,
+    "g": 0.0,
+    "b": 0.0,
+    "bitDepth": 10,
+    "size": 10
   }
 }
 ```
@@ -71,18 +74,19 @@ These methods drive ad hoc calibration patches. They do not require the client t
 
 ### `pattern.displayColor`
 
-Displays a full-screen RGB color.
+Displays an RGB color. By default the color fills the whole screen. When `size` is provided, it uses CalMAN-style screen area percentage and displays a centered patch over black.
 
 ```json
 {
   "r": 1.0,
   "g": 1.0,
   "b": 1.0,
-  "bitDepth": 10
+  "bitDepth": 10,
+  "size": 10
 }
 ```
 
-Color channels are normalized `0.0...1.0`.
+Color channels are normalized `0.0...1.0`. `size` is optional, defaults to `100`, and must be in `(0, 100]`. A `size` of `10` means 10% of total screen area; the centered rectangle side length is `sqrt(size / 100)`.
 
 Sample response:
 
@@ -94,23 +98,27 @@ Sample response:
 }
 ```
 
-### `pattern.displayRectangle`
+### `pattern.displayPatch`
 
-Displays a foreground rectangle over a background color.
+Displays one or more normalized rectangles over one background color. Rectangles are rendered in array order.
 
 ```json
 {
-  "foreground": { "r": 1.0, "g": 1.0, "b": 1.0 },
   "background": { "r": 0.0, "g": 0.0, "b": 0.0 },
-  "x": 960,
-  "y": 540,
-  "width": 1920,
-  "height": 1080,
+  "rectangles": [
+    {
+      "color": { "r": 1.0, "g": 1.0, "b": 1.0 },
+      "x": 0.25,
+      "y": 0.25,
+      "width": 0.5,
+      "height": 0.5
+    }
+  ],
   "bitDepth": 10
 }
 ```
 
-Rectangle coordinates are integer pixel coordinates in the current display space.
+Rectangle coordinates are normalized display-space values. `(0, 0)` is the top-left of the active output and `(1, 1)` is the bottom-right. Each rectangle must fit inside the normalized display space. A patch may contain up to 64 rectangles.
 
 Sample response:
 

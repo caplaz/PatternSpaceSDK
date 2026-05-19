@@ -2,6 +2,8 @@
 import PatternSpaceSDKCore
 
 public enum InputValidator {
+    public static let maxPatchRectangles = 64
+
     public static func validateColor(r: Double, g: Double, b: Double) throws {
         guard r.isFinite, g.isFinite, b.isFinite else {
             throw PSDispatchError(.invalidParams, message: "r, g, b must be finite numbers")
@@ -17,18 +19,38 @@ public enum InputValidator {
         }
     }
 
-    public static func validateRectangle(x: Int, y: Int, width: Int, height: Int,
-                                         in resolution: Resolution) throws {
-        guard width >= 1, height >= 1 else {
-            throw PSDispatchError(.invalidParams, message: "width and height must be ≥ 1")
+    public static func validateRectangle(x: Double, y: Double, width: Double, height: Double) throws {
+        guard x.isFinite, y.isFinite, width.isFinite, height.isFinite else {
+            throw PSDispatchError(.invalidParams, message: "x, y, width, height must be finite numbers")
         }
-        guard x >= 0, y >= 0 else {
-            throw PSDispatchError(.invalidParams, message: "x and y must be ≥ 0")
+        guard width > 0, height > 0 else {
+            throw PSDispatchError(.invalidParams, message: "width and height must be > 0")
         }
-        guard x + width <= resolution.width, y + height <= resolution.height else {
-            throw PSDispatchError(.invalidParams,
-                message: "Rectangle (\(x)+\(width), \(y)+\(height)) exceeds display resolution \(resolution.width)×\(resolution.height)")
+        guard x >= 0, y >= 0, x + width <= 1.0, y + height <= 1.0 else {
+            throw PSDispatchError(.invalidParams, message: "rectangle coordinates must fit within normalized display space")
         }
+    }
+
+    public static func validateRectangleCount(_ count: Int) throws {
+        guard count > 0 else {
+            throw PSDispatchError(.invalidParams, message: "rectangles must not be empty")
+        }
+        guard count <= maxPatchRectangles else {
+            throw PSDispatchError(.invalidParams, message: "rectangles must contain at most \(maxPatchRectangles) items")
+        }
+    }
+
+    public static func rectangleForCenteredPatch(sizePercent: Double?) throws -> NormalizedRectangle {
+        let size = sizePercent ?? 100
+        guard size.isFinite else {
+            throw PSDispatchError(.invalidParams, message: "size must be a finite number")
+        }
+        guard size > 0, size <= 100 else {
+            throw PSDispatchError(.invalidParams, message: "size must be in (0, 100]")
+        }
+        let side = (size / 100).squareRoot()
+        let origin = (1 - side) / 2
+        return NormalizedRectangle(x: origin, y: origin, width: side, height: side)
     }
 
     public static func validatePatternId(_ id: String) throws {

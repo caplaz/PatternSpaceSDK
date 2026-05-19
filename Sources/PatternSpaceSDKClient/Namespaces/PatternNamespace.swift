@@ -17,42 +17,45 @@ public final class PatternNamespace: Sendable {
                                    via: transport)
     }
 
-    public func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws {
-        struct Params: Encodable { let r: Double; let g: Double; let b: Double; let bitDepth: Int }
+    public func displayColor(_ color: PSColor, bitDepth: BitDepth, size: Double? = nil) async throws {
+        struct Params: Encodable { let r: Double; let g: Double; let b: Double; let bitDepth: Int; let size: Double? }
         _ = try await session.send(
             method: "pattern.displayColor",
-            params: Params(r: color.r, g: color.g, b: color.b, bitDepth: bitDepth.rawValue),
+            params: Params(r: color.r, g: color.g, b: color.b, bitDepth: bitDepth.rawValue, size: size),
             via: transport
         )
     }
 
-    public func displayRectangle(foreground: PSColor,
-                                 background: PSColor,
-                                 x: Int,
-                                 y: Int,
-                                 width: Int,
-                                 height: Int,
-                                 bitDepth: BitDepth) async throws {
+    public func displayPatch(background: PSColor,
+                             rectangles: [PatchRectangle],
+                             bitDepth: BitDepth) async throws {
         struct ColorParams: Encodable { let r: Double; let g: Double; let b: Double }
+        struct WireRectangleParams: Encodable {
+            let color: ColorParams
+            let x: Double
+            let y: Double
+            let width: Double
+            let height: Double
+        }
         struct Params: Encodable {
-            let foreground: ColorParams
             let background: ColorParams
-            let x: Int
-            let y: Int
-            let width: Int
-            let height: Int
+            let rectangles: [WireRectangleParams]
             let bitDepth: Int
         }
 
         _ = try await session.send(
-            method: "pattern.displayRectangle",
+            method: "pattern.displayPatch",
             params: Params(
-                foreground: ColorParams(r: foreground.r, g: foreground.g, b: foreground.b),
                 background: ColorParams(r: background.r, g: background.g, b: background.b),
-                x: x,
-                y: y,
-                width: width,
-                height: height,
+                rectangles: rectangles.map {
+                    WireRectangleParams(
+                        color: ColorParams(r: $0.color.r, g: $0.color.g, b: $0.color.b),
+                        x: $0.x,
+                        y: $0.y,
+                        width: $0.width,
+                        height: $0.height
+                    )
+                },
                 bitDepth: bitDepth.rawValue
             ),
             via: transport

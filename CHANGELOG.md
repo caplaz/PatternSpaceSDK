@@ -4,6 +4,16 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.2.0] - 2026-05-18
+
+### Changed
+
+- Replaced `pattern.displayRectangle` with `pattern.displayPatch`.
+- Replaced pixel rectangle coordinates with normalized display-space coordinates.
+- Added multi-rectangle patch support with one shared background color.
+- Added optional CalMAN-style area percentage `size` to `pattern.displayColor`.
+- Removed `currentResolution` from `PatternSpaceServerDelegate`; patch placement no longer depends on client-visible screen resolution.
+
 ## [0.1.0] - 2026-05-18
 
 ### Added

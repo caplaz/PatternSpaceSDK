@@ -13,7 +13,7 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
     var displayedPatternId: String?
     var displayedColor: PSColor?
     var displayedBitDepth: BitDepth?
-    var displayedRect: RectangleParams?
+    var displayedPatch: PatchParams?
     var clearCalled = false
     var shouldThrowNotFound = false
 
@@ -24,7 +24,7 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
     func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws {
         displayedColor = color; displayedBitDepth = bitDepth
     }
-    func displayRectangle(_ params: RectangleParams) async throws { displayedRect = params }
+    func displayPatch(_ params: PatchParams) async throws { displayedPatch = params }
     func clearDisplay() async throws { clearCalled = true }
     func listPatterns(category: String?, subcategory: String?) async throws -> [PatternInfo] {
         [PatternInfo(id: "Color-One-Red", name: "Red", category: "Color", subcategory: "Solid")]
@@ -80,6 +80,58 @@ func responseObject(from data: Data) throws -> JSONValue {
                                             params: #"{"r":2.0,"g":0.0,"b":0.0,"bitDepth":10}"#))
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
+    }
+    @Test func displayColorWithSizeMapsToCenteredPatch() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+        let resp = await d.dispatch(request(method: "pattern.displayColor",
+                                            params: #"{"r":1.0,"g":0.0,"b":0.0,"bitDepth":10,"size":10}"#))
+        let obj = try responseObject(from: resp)
+        #expect(obj.object?["result"] != nil)
+        let patch = try #require(mock.displayedPatch)
+        #expect(patch.background == PSColor(r: 0, g: 0, b: 0))
+        #expect(patch.rectangles.count == 1)
+        #expect(patch.rectangles[0].color == PSColor(r: 1, g: 0, b: 0))
+        #expect(abs(patch.rectangles[0].x - 0.341886) < 0.0001)
+        #expect(abs(patch.rectangles[0].width - 0.316227) < 0.0001)
+        #expect(patch.bitDepth == .ten)
+    }
+    @Test func displayPatchCallsDelegateWithMultipleRectangles() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+        let resp = await d.dispatch(request(method: "pattern.displayPatch", params: """
+        {
+          "background":{"r":0.0,"g":0.0,"b":0.0},
+          "rectangles":[
+            {"color":{"r":1.0,"g":0.0,"b":0.0},"x":0.0,"y":0.0,"width":0.5,"height":0.5},
+            {"color":{"r":0.0,"g":1.0,"b":0.0},"x":0.5,"y":0.5,"width":0.5,"height":0.5}
+          ],
+          "bitDepth":10
+        }
+        """))
+        let obj = try responseObject(from: resp)
+        #expect(obj.object?["result"] != nil)
+        let patch = try #require(mock.displayedPatch)
+        #expect(patch.rectangles.count == 2)
+        #expect(patch.rectangles[1].color == PSColor(r: 0, g: 1, b: 0))
+        #expect(patch.rectangles[1].x == 0.5)
+    }
+    @Test func displayPatchRejectsEmptyRectangleList() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+        let resp = await d.dispatch(request(method: "pattern.displayPatch", params: """
+        {"background":{"r":0.0,"g":0.0,"b":0.0},"rectangles":[],"bitDepth":10}
+        """))
+        let obj = try responseObject(from: resp)
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
+    }
+    @Test func displayRectangleIsNoLongerSupported() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+        let resp = await d.dispatch(request(method: "pattern.displayRectangle",
+                                            params: #"{"foreground":{"r":1,"g":1,"b":1},"background":{"r":0,"g":0,"b":0},"x":0,"y":0,"width":1,"height":1,"bitDepth":10}"#))
+        let obj = try responseObject(from: resp)
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
     @Test func unknownMethodReturnsMethodNotFound() async throws {
         let mock = MockDelegate()
