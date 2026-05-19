@@ -1,13 +1,30 @@
 // Sources/PatternSpaceSDKCore/JSON/JSONValue.swift
 import Foundation
 
+/// A type-safe representation of arbitrary JSON values.
+///
+/// The dispatcher uses `JSONValue` when it needs to validate request envelopes
+/// before decoding method-specific parameter structures.
 public enum JSONValue: Codable, Sendable, Equatable {
+    /// The JSON `null` value.
     case null
+
+    /// A JSON boolean.
     case bool(Bool)
+
+    /// A JSON integer number.
     case int(Int)
+
+    /// A JSON floating-point number.
     case double(Double)
+
+    /// A JSON string.
     case string(String)
+
+    /// A JSON array.
     case array([JSONValue])
+
+    /// A JSON object.
     case object([String: JSONValue])
 
     public init(from decoder: Decoder) throws {
@@ -36,11 +53,22 @@ public enum JSONValue: Codable, Sendable, Equatable {
         }
     }
 
+    /// Returns the object payload when this value is an object.
     public var object: [String: JSONValue]? { if case .object(let o) = self { return o }; return nil }
+
+    /// Returns the array payload when this value is an array.
     public var array:  [JSONValue]?          { if case .array(let a)  = self { return a }; return nil }
+
+    /// Returns the string payload when this value is a string.
     public var string: String?               { if case .string(let s) = self { return s }; return nil }
+
+    /// Returns the boolean payload when this value is a boolean.
     public var bool:   Bool?                 { if case .bool(let b)   = self { return b }; return nil }
+
+    /// Returns the integer payload when this value is an integer.
     public var int:    Int?                  { if case .int(let i)    = self { return i }; return nil }
+
+    /// Returns either integer or floating-point JSON numbers as `Double`.
     public var number: Double? {
         switch self {
         case .double(let d): return d

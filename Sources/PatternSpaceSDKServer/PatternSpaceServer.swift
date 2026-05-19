@@ -2,6 +2,11 @@ import Foundation
 import Network
 import PatternSpaceSDKCore
 
+/// WebSocket JSON-RPC server for embedding PatternSpace protocol support.
+///
+/// The server advertises itself with Bonjour, accepts WebSocket connections on
+/// `/patternspace`, validates incoming requests, and forwards protocol actions
+/// to a `PatternSpaceServerDelegate`.
 public final class PatternSpaceServer: @unchecked Sendable {
     private let token: String?
     private let upgradeHandler: WebSocketUpgradeHandler
@@ -11,6 +16,12 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private let lock = NSLock()
 
+    /// Creates a PatternSpace protocol server.
+    ///
+    /// - Parameters:
+    ///   - token: Optional bearer token required for WebSocket upgrades.
+    ///   - delegate: Host app delegate that performs validated operations.
+    ///   - connectionReady: Builds the initial device snapshot for new clients.
     public init(token: String?,
                 delegate: any PatternSpaceServerDelegate,
                 connectionReady: @escaping (Bool, Int) -> ConnectionReadyParams) {
@@ -20,6 +31,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
         self.buildConnectionReady = connectionReady
     }
 
+    /// Starts listening for WebSocket clients and advertising over Bonjour.
     public func start(port: UInt16 = 7878, deviceName: String) throws {
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
@@ -38,6 +50,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
         self.listener = listener
     }
 
+    /// Stops the listener and closes all connected clients.
     public func stop() {
         listener?.cancel()
         listener = nil
@@ -50,6 +63,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
         snapshot.forEach { $0.close() }
     }
 
+    /// Broadcasts a server notification to connected clients.
     public func broadcast(_ event: PatternSpaceEvent) {
         guard let data = encodeEvent(event) else { return }
         let frame = WebSocketFrameCodec.encode(WebSocketFrame(opcode: .text, payload: data))

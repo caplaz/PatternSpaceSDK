@@ -1,22 +1,39 @@
 // Sources/PatternSpaceSDKServer/Delegate/PatternSpaceServerDelegate.swift
 import PatternSpaceSDKCore
 
-/// PatternSpace.app implements this protocol and passes itself to PatternSpaceServer.
-/// The dispatcher calls write methods only when isSourceActive returns true.
+/// Server-side integration point implemented by a PatternSpace host app.
+///
+/// `PatternSpaceServer` receives JSON-RPC requests and forwards validated
+/// operations to this delegate. Write methods are invoked only while
+/// `isSourceActive` is `true`.
 public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
 
     // MARK: Write — only invoked when isSourceActive == true
 
+    /// Displays an app-provided pattern by protocol identifier.
     func displayPattern(id: String) async throws
+
+    /// Displays a full-screen solid color.
     func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws
+
+    /// Displays one or more normalized rectangles over a background color.
     func displayPatch(_ params: PatchParams) async throws
+
+    /// Clears the current JSON protocol pattern.
     func clearDisplay() async throws
 
     // MARK: Read — always invoked
 
+    /// Lists available patterns, optionally filtered by category and subcategory.
     func listPatterns(category: String?, subcategory: String?) async throws -> [PatternInfo]
+
+    /// Returns metadata for a single pattern.
     func getPattern(id: String) async throws -> PatternInfo
+
+    /// Returns static and configuration information about the active display.
     func deviceInfo() async throws -> DeviceInfo
+
+    /// Returns runtime state for the host app.
     func deviceStatus() async throws -> DeviceStatus
 
     // MARK: Source state

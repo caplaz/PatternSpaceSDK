@@ -1,18 +1,28 @@
 import CryptoKit
 import Foundation
 
+/// Result of a WebSocket upgrade attempt.
 public enum UpgradeResult: Sendable {
+    /// Upgrade accepted with an HTTP 101 response.
     case accept(Data)
+
+    /// Upgrade rejected with an HTTP error response.
     case reject(Data)
 }
 
+/// Validates WebSocket upgrade requests for the PatternSpace endpoint.
 public struct WebSocketUpgradeHandler: Sendable {
     private let token: String?
 
+    /// Creates an upgrade handler.
+    ///
+    /// - Parameter token: Optional bearer token required in the `Authorization`
+    ///   header.
     public init(token: String?) {
         self.token = token
     }
 
+    /// Validates an HTTP upgrade request and returns the response bytes.
     public func handle(requestData: Data) -> UpgradeResult {
         guard let text = String(data: requestData, encoding: .utf8) else {
             return .reject(httpResponse("400 Bad Request", headers: [:]))

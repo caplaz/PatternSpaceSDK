@@ -2,13 +2,19 @@
 import Foundation
 import PatternSpaceSDKCore
 
+/// Dispatches validated JSON-RPC requests to a `PatternSpaceServerDelegate`.
+///
+/// This type owns protocol-level request validation, method routing, and
+/// JSON-RPC error response construction.
 public final class JSONRPCDispatcher: @unchecked Sendable {
     private weak var delegate: (any PatternSpaceServerDelegate)?
 
+    /// Creates a dispatcher for a server delegate.
     public init(delegate: any PatternSpaceServerDelegate) {
         self.delegate = delegate
     }
 
+    /// Handles one raw JSON-RPC request payload and returns an encoded response.
     public func dispatch(_ data: Data) async -> Data {
         // Stage 1: JSON syntax. Any failure → -32700, id is null per spec §5.
         guard let raw = try? JSONDecoder().decode(JSONValue.self, from: data) else {

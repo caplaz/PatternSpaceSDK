@@ -2,11 +2,18 @@ import Foundation
 import Network
 import PatternSpaceSDKCore
 
+/// A PatternSpace service discovered on the local network.
 public struct PatternSpaceService: Sendable {
+    /// Bonjour service name advertised by the PatternSpace app.
     public let name: String
+
+    /// Network endpoint used by the client transport.
     public let endpoint: NWEndpoint
+
+    /// TCP port used by the PatternSpace JSON protocol.
     public let port: UInt16
 
+    /// Creates a discovered service descriptor.
     public init(name: String, endpoint: NWEndpoint, port: UInt16) {
         self.name = name
         self.endpoint = endpoint
@@ -14,12 +21,22 @@ public struct PatternSpaceService: Sendable {
     }
 }
 
+/// Errors raised by the high-level PatternSpace client.
 public enum PatternSpaceClientError: Error, Sendable {
+    /// The WebSocket transport disconnected while a request was pending.
     case disconnected
 }
 
+/// High-level client for the PatternSpace JSON protocol.
+///
+/// Use `PatternSpaceDiscovery` to locate a running app, create a client with
+/// the discovered service, then call methods on the `pattern` and `device`
+/// namespaces.
 public final class PatternSpaceClient: @unchecked Sendable {
+    /// Pattern-related JSON-RPC methods.
     public let pattern: PatternNamespace
+
+    /// Device information and status methods.
     public let device: DeviceNamespace
 
     private let service: PatternSpaceService
@@ -31,6 +48,11 @@ public final class PatternSpaceClient: @unchecked Sendable {
     private var intentionallyDisconnected = false
     private var reconnectDelay: TimeInterval = 1.0
 
+    /// Creates a client for a discovered PatternSpace service.
+    ///
+    /// - Parameters:
+    ///   - service: Service returned by `PatternSpaceDiscovery`.
+    ///   - token: Optional bearer token required by servers that enable auth.
     public init(service: PatternSpaceService, token: String? = nil) {
         self.service = service
         self.token = token
@@ -55,15 +77,18 @@ public final class PatternSpaceClient: @unchecked Sendable {
         }
     }
 
+    /// Stream of asynchronous server notifications and transport failures.
     public var events: AsyncStream<PatternSpaceEvent> {
         eventStream
     }
 
+    /// Opens the WebSocket connection and starts automatic reconnection.
     public func connect() {
         intentionallyDisconnected = false
         transport.connect(to: service.endpoint, token: token)
     }
 
+    /// Closes the connection and finishes the event stream.
     public func disconnect() {
         intentionallyDisconnected = true
         transport.disconnect()

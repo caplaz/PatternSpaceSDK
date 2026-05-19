@@ -1,11 +1,17 @@
 import Foundation
 import Network
 
+/// Discovers PatternSpace apps advertised over Bonjour.
 public final class PatternSpaceDiscovery: @unchecked Sendable {
     private var browser: NWBrowser?
 
+    /// Creates a discovery helper.
     public init() {}
 
+    /// Searches the local network for PatternSpace services.
+    ///
+    /// - Parameter timeout: Number of seconds to browse before returning.
+    /// - Returns: Services discovered before the timeout expires.
     public func discover(timeout: TimeInterval = 5) async -> [PatternSpaceService] {
         await withCheckedContinuation { continuation in
             let queue = DispatchQueue(label: "com.patternspace.discovery")

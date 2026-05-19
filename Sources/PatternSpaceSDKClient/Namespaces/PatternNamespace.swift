@@ -1,6 +1,7 @@
 import Foundation
 import PatternSpaceSDKCore
 
+/// Client namespace for `pattern.*` JSON-RPC methods.
 public final class PatternNamespace: Sendable {
     private let session: JSONRPCSession
     private let transport: WebSocketTransport
@@ -10,6 +11,9 @@ public final class PatternNamespace: Sendable {
         self.transport = transport
     }
 
+    /// Displays a pattern by protocol identifier.
+    ///
+    /// - Parameter id: Pattern identifier returned by `list` or `get`.
     public func display(id: String) async throws {
         struct Params: Encodable { let patternId: String }
         _ = try await session.send(method: "pattern.display",
@@ -17,6 +21,12 @@ public final class PatternNamespace: Sendable {
                                    via: transport)
     }
 
+    /// Displays a solid color, optionally as a centered area patch.
+    ///
+    /// When `size` is omitted, the color fills the whole display. When `size`
+    /// is provided, it represents the percentage of screen area to cover, using
+    /// the same area-based convention as CalMAN. For example, `size: 10`
+    /// displays a centered square covering 10% of the screen area.
     public func displayColor(_ color: PSColor, bitDepth: BitDepth, size: Double? = nil) async throws {
         struct Params: Encodable { let r: Double; let g: Double; let b: Double; let bitDepth: Int; let size: Double? }
         _ = try await session.send(
@@ -26,6 +36,10 @@ public final class PatternNamespace: Sendable {
         )
     }
 
+    /// Displays one or more normalized rectangles over a shared background.
+    ///
+    /// Rectangles use normalized display coordinates, where `0...1` maps to
+    /// the current active display area.
     public func displayPatch(background: PSColor,
                              rectangles: [PatchRectangle],
                              bitDepth: BitDepth) async throws {
@@ -62,11 +76,13 @@ public final class PatternNamespace: Sendable {
         )
     }
 
+    /// Clears the current JSON protocol pattern from the display.
     public func clear() async throws {
         struct Params: Encodable {}
         _ = try await session.send(method: "pattern.clear", params: Params(), via: transport)
     }
 
+    /// Lists available patterns, optionally filtered by category.
     public func list(category: String? = nil, subcategory: String? = nil) async throws -> [PatternInfo] {
         struct Params: Encodable { let category: String?; let subcategory: String? }
         struct Response: Decodable { let patterns: [PatternInfo] }
@@ -80,6 +96,7 @@ public final class PatternNamespace: Sendable {
         return try JSONDecoder().decode(Response.self, from: data).patterns
     }
 
+    /// Returns metadata for one pattern.
     public func get(id: String) async throws -> PatternInfo {
         struct Params: Encodable { let patternId: String }
         let result = try await session.send(method: "pattern.get",
