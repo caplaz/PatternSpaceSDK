@@ -182,12 +182,20 @@ ws://<host>:7878/patternspace
 
 Supported method namespaces:
 
-- `pattern.display`
+Patch color methods:
+
 - `pattern.displayColor`
 - `pattern.displayRectangle`
 - `pattern.clear`
+
+Existing pattern list methods:
+
 - `pattern.list`
+- `pattern.display`
 - `pattern.get`
+
+Device methods:
+
 - `device.info`
 - `device.status`
 

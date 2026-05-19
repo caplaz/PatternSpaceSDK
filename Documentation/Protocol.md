@@ -65,18 +65,34 @@ Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients re
 
 ## Methods
 
+### Patch Color Methods
+
+These methods drive ad hoc calibration patches. They do not require the client to know the app's built-in pattern catalog.
+
 ### `pattern.displayColor`
 
 Displays a full-screen RGB color.
 
 ```json
 {
-  "color": { "r": 1.0, "g": 1.0, "b": 1.0 },
+  "r": 1.0,
+  "g": 1.0,
+  "b": 1.0,
   "bitDepth": 10
 }
 ```
 
 Color channels are normalized `0.0...1.0`.
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {}
+}
+```
 
 ### `pattern.displayRectangle`
 
@@ -96,6 +112,16 @@ Displays a foreground rectangle over a background color.
 
 Rectangle coordinates are integer pixel coordinates in the current display space.
 
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {}
+}
+```
+
 ### `pattern.clear`
 
 Clears the active remote pattern.
@@ -103,6 +129,20 @@ Clears the active remote pattern.
 ```json
 {}
 ```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {}
+}
+```
+
+### Existing Pattern List Methods
+
+These methods let clients discover and display patterns that PatternSpace already ships in its catalog.
 
 ### `pattern.list`
 
@@ -115,14 +155,50 @@ Lists available patterns, optionally filtered by category and subcategory.
 }
 ```
 
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "patterns": [
+      {
+        "id": "color/red",
+        "name": "Red",
+        "category": "color",
+        "subcategory": "primary"
+      },
+      {
+        "id": "checks/checkerboard",
+        "name": "Checkerboard",
+        "category": "checks",
+        "subcategory": "layout"
+      }
+    ]
+  }
+}
+```
+
 ### `pattern.display`
 
 Displays a named pattern by id.
 
 ```json
 {
-  "id": "color/red",
-  "params": {}
+  "patternId": "color/red"
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "patternId": "color/red"
+  }
 }
 ```
 
@@ -132,7 +208,22 @@ Gets metadata for one pattern.
 
 ```json
 {
-  "id": "color/red"
+  "patternId": "color/red"
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "result": {
+    "id": "color/red",
+    "name": "Red",
+    "category": "color",
+    "subcategory": "primary"
+  }
 }
 ```
 
