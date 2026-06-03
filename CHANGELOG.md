@@ -14,10 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `PSErrorCode.displayNotFound`, `.peakWhiteOutOfRange`, `.notAuthorized` typed error codes
 - `PatternSpaceClient.display` namespace with `list()` and `setPeakWhite(displayId:peakWhite:)`
 - `PatternSpaceEvent.displayChanged(DisplayListResult)` — **source-breaking** for exhaustive switches; minor version bump signals this
+- `PatternSpaceServerDelegate.listDisplays()` and `setPeakWhite(_:)` host hooks — **source-breaking** for server delegate conformers
+- Protocol documentation and README examples for the `display.*` methods
 
 ### Notes
 - `display.list` and `display.setPeakWhite` do not require the JSON source to be active
 - `peakWhite` and `effectivePeakWhite` can differ when the stored value exceeds current display capability (non-destructive clamping)
+- `display.setPeakWhite` returns the updated `DisplayEntry` directly, not a wrapper object
 
 ## [0.2.1] - 2026-05-19
 

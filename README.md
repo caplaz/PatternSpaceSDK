@@ -2,7 +2,7 @@
 
 WebSocket JSON-RPC SDK for PatternSpace integration.
 
-PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying device state, and receiving live status events.
+PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying device and display state, adjusting Peak White, and receiving live status events.
 
 ## Features
 
@@ -12,7 +12,7 @@ PatternSpaceSDK gives calibration tools and automation clients a typed Swift int
 - JSON-RPC 2.0 request and notification envelopes
 - WebSocket transport over Network.framework
 - Optional bearer-token authentication
-- Client API for pattern and device namespaces
+- Client API for pattern, device, and display namespaces
 - Server API for embedding the protocol in PatternSpace-compatible apps
 - Swift Testing coverage for core JSON models, dispatch, input validation, WebSocket upgrade, and frame handling
 
@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.2.1")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.3.0")
     ],
     targets: [
         .executableTarget(
@@ -90,6 +90,10 @@ try await client.pattern.displayPatch(
     ],
     bitDepth: .ten
 )
+let displays = try await client.display.list()
+if let selected = displays.displays.first(where: \.selected) {
+    _ = try await client.display.setPeakWhite(displayId: selected.id, peakWhite: 3.0)
+}
 try await client.pattern.clear()
 client.disconnect()
 ```
@@ -139,6 +143,64 @@ final class Delegate: PatternSpaceServerDelegate {
 
     func deviceStatus() async throws -> DeviceStatus {
         DeviceStatus(currentPatternId: nil, sourceActive: true)
+    }
+
+    func listDisplays() async throws -> DisplayListResult {
+        DisplayListResult(
+            platform: .macOS,
+            selectedDisplayId: "main",
+            displays: [
+                DisplayEntry(
+                    id: "main",
+                    name: "Main Display",
+                    selected: true,
+                    connection: .builtIn,
+                    resolution: Resolution(width: 3840, height: 2160),
+                    refreshRate: 60,
+                    colorSpaceName: "Display P3",
+                    cgColorSpaceName: "kCGColorSpaceDisplayP3",
+                    maximumPotentialEDR: 4.0,
+                    maximumCurrentEDR: 2.0,
+                    peakWhite: 2.0,
+                    effectivePeakWhite: 2.0,
+                    peakWhiteRange: PeakWhiteRange(maximum: 4.0),
+                    supportsPeakWhiteControl: true
+                )
+            ]
+        )
+    }
+
+    func setPeakWhite(_ params: SetPeakWhiteParams) async throws -> DisplayEntry {
+        guard params.displayId == "main" else {
+            throw PSDispatchError(.displayNotFound, data: .object(["displayId": .string(params.displayId)]))
+        }
+        guard params.peakWhite >= PeakWhiteRange.absoluteMinimum, params.peakWhite <= 4.0 else {
+            throw PSDispatchError(
+                .peakWhiteOutOfRange,
+                data: .object([
+                    "displayId": .string(params.displayId),
+                    "peakWhite": .double(params.peakWhite),
+                    "minimum": .double(PeakWhiteRange.absoluteMinimum),
+                    "maximum": .double(4.0)
+                ])
+            )
+        }
+        return DisplayEntry(
+            id: "main",
+            name: "Main Display",
+            selected: true,
+            connection: .builtIn,
+            resolution: Resolution(width: 3840, height: 2160),
+            refreshRate: 60,
+            colorSpaceName: "Display P3",
+            cgColorSpaceName: "kCGColorSpaceDisplayP3",
+            maximumPotentialEDR: 4.0,
+            maximumCurrentEDR: 2.0,
+            peakWhite: params.peakWhite,
+            effectivePeakWhite: min(params.peakWhite, 2.0),
+            peakWhiteRange: PeakWhiteRange(maximum: 4.0),
+            supportsPeakWhiteControl: true
+        )
     }
 
     var isSourceActive: Bool { true }
@@ -209,11 +271,17 @@ Device methods:
 - `device.info`
 - `device.status`
 
+Display methods:
+
+- `display.list`
+- `display.setPeakWhite`
+
 Notifications:
 
 - `connectionReady`
 - `pattern.changed`
 - `device.statusChanged`
+- `display.changed`
 
 See [Documentation](Documentation/Protocol.md) for the wire-format overview.
 

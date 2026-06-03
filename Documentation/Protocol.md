@@ -243,6 +243,116 @@ Returns static device information such as name, resolution, color format, bit de
 
 Returns current status, including active pattern id and whether the JSON source is active.
 
+### Display Methods
+
+These methods expose display inventory and Peak White control. They are authenticated when the server requires a token, but they do not require the JSON source to be active.
+
+### `display.list`
+
+Returns display inventory and selected display metadata.
+
+```json
+{}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "platform": "macOS",
+    "selectedDisplayId": "69734272",
+    "displays": [
+      {
+        "id": "69734272",
+        "name": "Studio Display",
+        "selected": true,
+        "connection": "wired",
+        "resolution": { "width": 5120, "height": 2880 },
+        "refreshRate": 60,
+        "colorSpaceName": "Display P3",
+        "cgColorSpaceName": "kCGColorSpaceDisplayP3",
+        "maximumPotentialEDR": 4.0,
+        "maximumCurrentEDR": 2.0,
+        "peakWhite": 4.0,
+        "effectivePeakWhite": 2.0,
+        "peakWhiteRange": {
+          "minimum": 0.25,
+          "maximum": 4.0
+        },
+        "supportsPeakWhiteControl": true
+      }
+    ]
+  }
+}
+```
+
+`platform` is `macOS` or `iOS`. `connection` is `builtIn`, `wired`, `airPlay`, or `unknown`; `unknown` is reserved for defensive fallback when a host cannot classify a display. On iOS, external outputs report `wired` for USB/HDMI-style connections or `airPlay` for AirPlay routes.
+
+`peakWhite` is the stored EDR-relative Peak White value. `effectivePeakWhite` is the value currently in use after non-destructive clamping to the display's current capability, so it can be lower than `peakWhite`.
+
+### `display.setPeakWhite`
+
+Sets Peak White for one display and returns the updated display entry directly.
+
+```json
+{
+  "displayId": "69734272",
+  "peakWhite": 3.0
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "id": "69734272",
+    "name": "Studio Display",
+    "selected": true,
+    "connection": "wired",
+    "resolution": { "width": 5120, "height": 2880 },
+    "refreshRate": 60,
+    "colorSpaceName": "Display P3",
+    "cgColorSpaceName": "kCGColorSpaceDisplayP3",
+    "maximumPotentialEDR": 4.0,
+    "maximumCurrentEDR": 2.0,
+    "peakWhite": 3.0,
+    "effectivePeakWhite": 2.0,
+    "peakWhiteRange": {
+      "minimum": 0.25,
+      "maximum": 4.0
+    },
+    "supportsPeakWhiteControl": true
+  }
+}
+```
+
+`peakWhite` must be a finite number in the returned display's accepted `peakWhiteRange`. Out-of-range writes return `peakWhiteOutOfRange` with the rejected value and accepted bounds:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "error": {
+    "code": -32008,
+    "message": "Peak White out of range",
+    "data": {
+      "displayId": "69734272",
+      "peakWhite": 12.0,
+      "minimum": 0.25,
+      "maximum": 4.0
+    }
+  }
+}
+```
+
+Other display errors include `displayNotFound` (`-32007`) and `notAuthorized` (`-32009`).
+
 ## Notifications
 
 ### `connectionReady`
@@ -258,6 +368,22 @@ Sent when the displayed pattern changes.
 ### `device.statusChanged`
 
 Sent when device state changes.
+
+### `display.changed`
+
+Sent when display inventory, selected display, or Peak White values change. The payload has the same shape as a `display.list` result.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "display.changed",
+  "params": {
+    "platform": "macOS",
+    "selectedDisplayId": "69734272",
+    "displays": []
+  }
+}
+```
 
 ## Limits
 
