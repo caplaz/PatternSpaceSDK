@@ -4,6 +4,21 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.3.0] - 2026-06-03
+
+### Added
+- `display.list` — returns display inventory and selected display metadata
+- `display.setPeakWhite` — sets Peak White for one display (authenticated, Pro-gated)
+- `display.changed` — notification broadcast on display inventory, selection, or Peak White changes
+- `DisplayEntry`, `DisplayListResult`, `PeakWhiteRange`, `SetPeakWhiteParams` Codable models in `PatternSpaceSDKCore`
+- `PSErrorCode.displayNotFound`, `.peakWhiteOutOfRange`, `.notAuthorized` typed error codes
+- `PatternSpaceClient.display` namespace with `list()` and `setPeakWhite(displayId:peakWhite:)`
+- `PatternSpaceEvent.displayChanged(DisplayListResult)` — **source-breaking** for exhaustive switches; minor version bump signals this
+
+### Notes
+- `display.list` and `display.setPeakWhite` do not require the JSON source to be active
+- `peakWhite` and `effectivePeakWhite` can differ when the stored value exceeds current display capability (non-destructive clamping)
+
 ## [0.2.1] - 2026-05-19
 
 ### Breaking changes

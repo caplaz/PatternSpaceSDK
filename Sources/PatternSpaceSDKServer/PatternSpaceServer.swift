@@ -136,8 +136,20 @@ public final class PatternSpaceServer: @unchecked Sendable {
             return try? JSONEncoder().encode(JSONRPCNotification(method: "device.statusChanged", params: snapshot))
         case .connectionFailed:
             return nil
+        case .displayChanged(let result):
+            return try? JSONEncoder().encode(JSONRPCNotification(method: "display.changed", params: result))
         }
     }
+
+    #if DEBUG
+    /// Test-only helper that encodes an event as a JSON-RPC notification payload.
+    public func encodedEventForTest(_ event: PatternSpaceEvent) throws -> Data {
+        guard let data = encodeEvent(event) else {
+            throw PSDispatchError(.internalError, message: "failed to encode notification")
+        }
+        return data
+    }
+    #endif
 }
 
 private final class ClientConnection: @unchecked Sendable {

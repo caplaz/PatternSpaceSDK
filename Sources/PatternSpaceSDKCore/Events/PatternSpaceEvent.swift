@@ -16,4 +16,7 @@ public enum PatternSpaceEvent: Sendable {
     /// Emitted when the transport fails to connect or drops unexpectedly.
     /// The client will attempt automatic reconnection after this event.
     case connectionFailed(Error)
+
+    /// Emitted when the display inventory, selection, or Peak White values change.
+    case displayChanged(DisplayListResult)
 }

@@ -39,6 +39,9 @@ public final class PatternSpaceClient: @unchecked Sendable {
     /// Device information and status methods.
     public let device: DeviceNamespace
 
+    /// Display inventory and peak-white control methods.
+    public let display: DisplayNamespace
+
     private let service: PatternSpaceService
     private let token: String?
     private let transport = WebSocketTransport()
@@ -59,6 +62,7 @@ public final class PatternSpaceClient: @unchecked Sendable {
         (eventStream, eventContinuation) = AsyncStream.makeStream()
         pattern = PatternNamespace(session: session, transport: transport)
         device = DeviceNamespace(session: session, transport: transport)
+        display = DisplayNamespace(session: session, transport: transport)
 
         session.onNotification = { [weak self] method, params in
             self?.handleNotification(method: method, params: params)
@@ -124,6 +128,12 @@ public final class PatternSpaceClient: @unchecked Sendable {
                   let data = try? JSONEncoder().encode(params),
                   let snapshot = try? JSONDecoder().decode(DeviceSnapshot.self, from: data) else { return }
             eventContinuation.yield(.deviceStatusChanged(snapshot))
+
+        case "display.changed":
+            guard let params,
+                  let data = try? JSONEncoder().encode(params),
+                  let result = try? JSONDecoder().decode(DisplayListResult.self, from: data) else { return }
+            eventContinuation.yield(.displayChanged(result))
 
         default:
             break
