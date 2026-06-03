@@ -33,6 +33,15 @@ public enum PSErrorCode: Int, Sendable {
     /// Client sent too many requests in the current rate-limit window.
     case rateLimitExceeded = -32006
 
+    /// Requested display identifier does not exist.
+    case displayNotFound = -32007
+
+    /// Requested Peak White value is outside the display's accepted range.
+    case peakWhiteOutOfRange = -32008
+
+    /// Client is authenticated but not authorized for this operation.
+    case notAuthorized = -32009
+
     /// Default message paired with this error code.
     public var defaultMessage: String {
         switch self {
@@ -46,6 +55,9 @@ public enum PSErrorCode: Int, Sendable {
         case .invalidBitDepth:  return "Invalid bit depth"
         case .sourceNotActive:  return "Source not active"
         case .rateLimitExceeded: return "Rate limit exceeded"
+        case .displayNotFound: return "Display not found"
+        case .peakWhiteOutOfRange: return "Peak White out of range"
+        case .notAuthorized: return "Not authorized"
         }
     }
 }
