@@ -40,6 +40,69 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
     func deviceStatus() async throws -> DeviceStatus {
         DeviceStatus(currentPatternId: nil, sourceActive: isSourceActive)
     }
+
+    // MARK: - Display API
+
+    var displayList = DisplayListResult(
+        platform: .macOS,
+        selectedDisplayId: "69734272",
+        displays: [
+            DisplayEntry(
+                id: "69734272",
+                name: "Studio Display",
+                selected: true,
+                connection: .wired,
+                resolution: Resolution(width: 5120, height: 2880),
+                refreshRate: 60,
+                colorSpaceName: "Display P3",
+                cgColorSpaceName: "kCGColorSpaceDisplayP3",
+                maximumPotentialEDR: 4.0,
+                maximumCurrentEDR: 2.0,
+                peakWhite: 4.0,
+                effectivePeakWhite: 2.0,
+                peakWhiteRange: PeakWhiteRange(maximum: 4.0),
+                supportsPeakWhiteControl: true
+            )
+        ]
+    )
+    var setPeakWhiteCalls: [SetPeakWhiteParams] = []
+
+    func listDisplays() async throws -> DisplayListResult { displayList }
+
+    func setPeakWhite(_ params: SetPeakWhiteParams) async throws -> DisplayEntry {
+        setPeakWhiteCalls.append(params)
+        guard let display = displayList.displays.first(where: { $0.id == params.displayId }) else {
+            throw PSDispatchError(.displayNotFound, data: .object(["displayId": .string(params.displayId)]))
+        }
+        guard params.peakWhite >= display.peakWhiteRange.minimum,
+              params.peakWhite <= display.peakWhiteRange.maximum else {
+            throw PSDispatchError(
+                .peakWhiteOutOfRange,
+                data: .object([
+                    "displayId": .string(params.displayId),
+                    "peakWhite": .double(params.peakWhite),
+                    "minimum": .double(display.peakWhiteRange.minimum),
+                    "maximum": .double(display.peakWhiteRange.maximum)
+                ])
+            )
+        }
+        return DisplayEntry(
+            id: display.id,
+            name: display.name,
+            selected: display.selected,
+            connection: display.connection,
+            resolution: display.resolution,
+            refreshRate: display.refreshRate,
+            colorSpaceName: display.colorSpaceName,
+            cgColorSpaceName: display.cgColorSpaceName,
+            maximumPotentialEDR: display.maximumPotentialEDR,
+            maximumCurrentEDR: display.maximumCurrentEDR,
+            peakWhite: params.peakWhite,
+            effectivePeakWhite: min(params.peakWhite, display.maximumCurrentEDR),
+            peakWhiteRange: display.peakWhiteRange,
+            supportsPeakWhiteControl: display.supportsPeakWhiteControl
+        )
+    }
 }
 
 // MARK: - Helpers
@@ -216,5 +279,72 @@ func responseObject(from data: Data) throws -> JSONValue {
                                             params: #"{"patternId":"unknown"}"#))
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32002))
+    }
+
+    // MARK: - Display API tests
+
+    @Test func displayListAlwaysSucceedsWithInactiveSource() async throws {
+        let mock = MockDelegate()
+        mock.isSourceActive = false
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.list", params: "{}"))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["result"]?.object?["platform"] == .string("macOS"))
+        #expect(obj.object?["result"]?.object?["selectedDisplayId"] == .string("69734272"))
+    }
+
+    @Test func displaySetPeakWhiteDoesNotRequireActiveSource() async throws {
+        let mock = MockDelegate()
+        mock.isSourceActive = false
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.setPeakWhite",
+                                            params: #"{"displayId":"69734272","peakWhite":3.0}"#))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["result"]?.object?["id"] == .string("69734272"))
+        #expect(obj.object?["result"]?.object?["peakWhite"]?.number == 3.0)
+        #expect(mock.setPeakWhiteCalls == [SetPeakWhiteParams(displayId: "69734272", peakWhite: 3.0)])
+    }
+
+    @Test func displaySetPeakWhiteRejectsMissingDisplayId() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.setPeakWhite",
+                                            params: #"{"peakWhite":3.0}"#))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
+    }
+
+    @Test func displaySetPeakWhiteRejectsNonFiniteValue() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.setPeakWhite",
+                                            params: #"{"displayId":"69734272","peakWhite":"NaN"}"#))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
+    }
+
+    @Test func displaySetPeakWhiteReturnsRangeErrorData() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.setPeakWhite",
+                                            params: #"{"displayId":"69734272","peakWhite":12.0}"#))
+        let obj = try responseObject(from: resp)
+        let error = try #require(obj.object?["error"]?.object)
+        let data = try #require(error["data"]?.object)
+
+        #expect(error["code"] == .int(-32008))
+        #expect(data["displayId"] == .string("69734272"))
+        #expect(data["peakWhite"]?.number == 12.0)
+        #expect(data["minimum"]?.number == 0.25)
+        #expect(data["maximum"]?.number == 4.0)
     }
 }

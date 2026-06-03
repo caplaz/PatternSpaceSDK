@@ -69,4 +69,11 @@ public enum InputValidator {
             throw PSDispatchError(.invalidParams, message: "patternId must not be empty")
         }
     }
+
+    /// Validates that a peak-white EDR value is a finite number.
+    public static func validatePeakWhite(_ value: Double) throws {
+        guard value.isFinite else {
+            throw PSDispatchError(.invalidParams, message: "peakWhite must be a finite number")
+        }
+    }
 }

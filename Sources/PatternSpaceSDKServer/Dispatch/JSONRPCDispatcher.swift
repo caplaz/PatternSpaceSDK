@@ -72,6 +72,8 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         case "pattern.get":              return try await handleGet(params)
         case "device.info":              return try await handleDeviceInfo()
         case "device.status":            return try await handleDeviceStatus()
+        case "display.list":             return try await handleDisplayList()
+        case "display.setPeakWhite":     return try await handleSetPeakWhite(params)
         default: throw PSDispatchError(.methodNotFound)
         }
     }
@@ -199,6 +201,29 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
             throw PSDispatchError(.internalError)
         }
         return try encodeToJSONValue(status)
+    }
+
+    // MARK: - Display handlers
+
+    private func handleDisplayList() async throws -> JSONValue {
+        let result = try await delegate?.listDisplays()
+            ?? DisplayListResult(platform: .macOS, selectedDisplayId: nil, displays: [])
+        return try encodeToJSONValue(result)
+    }
+
+    private func handleSetPeakWhite(_ params: JSONValue?) async throws -> JSONValue {
+        let obj = params?.object ?? [:]
+        guard let displayId = obj["displayId"]?.string, !displayId.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
+        }
+        guard let peakWhite = obj["peakWhite"]?.number else {
+            throw PSDispatchError(.invalidParams, message: "peakWhite (number) is required")
+        }
+        try InputValidator.validatePeakWhite(peakWhite)
+        guard let display = try await delegate?.setPeakWhite(SetPeakWhiteParams(displayId: displayId, peakWhite: peakWhite)) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(display)
     }
 
     // MARK: - Helpers

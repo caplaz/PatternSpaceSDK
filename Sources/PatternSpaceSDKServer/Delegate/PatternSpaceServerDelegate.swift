@@ -36,6 +36,12 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Returns runtime state for the host app.
     func deviceStatus() async throws -> DeviceStatus
 
+    /// Returns display inventory and selected display metadata.
+    func listDisplays() async throws -> DisplayListResult
+
+    /// Sets Peak White for one display and returns the updated record.
+    func setPeakWhite(_ params: SetPeakWhiteParams) async throws -> DisplayEntry
+
     // MARK: Source state
 
     /// Returns true when the JSON source is the currently selected PatternSourceSelection.
