@@ -53,10 +53,93 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
     /// Whether the JSON protocol source is active in the app.
     public let sourceActive: Bool
 
+    /// User-visible source selected in the host app, if reported.
+    public let selectedSource: String?
+
+    /// Identifier of the currently selected display, if reported.
+    public let selectedDisplayId: String?
+
+    /// Host-global color-management mode currently applied to patch output.
+    public let colorManagementMode: ColorManagementMode?
+
+    /// Implementation path for the current color-management mode.
+    public let colorManagementImplementationStatus: ColorManagementImplementationStatus?
+
+    /// Whether the active display ICC/profile information could be resolved.
+    public let displayProfileResolved: Bool?
+
+    /// Scope affected by color-management writes.
+    public let colorManagementScope: ColorManagementScope?
+
+    /// Whether the JSON server requires authentication.
+    public let authRequired: Bool?
+
+    /// Connected JSON client count, if reported.
+    public let connectedClientCount: Int?
+
+    /// Host app marketing version, if reported.
+    public let appVersion: String?
+
+    /// Host app build number, if reported.
+    public let buildNumber: String?
+
+    /// PatternSpaceSDK version used by the host, if reported.
+    public let sdkVersion: String?
+
+    /// PatternSpace JSON protocol version used by the host, if reported.
+    public let protocolVersion: String?
+
     /// Creates a runtime status value.
     public init(currentPatternId: String?, sourceActive: Bool) {
+        self.init(
+            currentPatternId: currentPatternId,
+            sourceActive: sourceActive,
+            selectedSource: nil,
+            selectedDisplayId: nil,
+            colorManagementMode: nil,
+            colorManagementImplementationStatus: nil,
+            displayProfileResolved: nil,
+            colorManagementScope: nil,
+            authRequired: nil,
+            connectedClientCount: nil,
+            appVersion: nil,
+            buildNumber: nil,
+            sdkVersion: nil,
+            protocolVersion: nil
+        )
+    }
+
+    /// Creates a runtime status value with optional integration metadata.
+    public init(
+        currentPatternId: String?,
+        sourceActive: Bool,
+        selectedSource: String?,
+        selectedDisplayId: String?,
+        colorManagementMode: ColorManagementMode?,
+        colorManagementImplementationStatus: ColorManagementImplementationStatus?,
+        displayProfileResolved: Bool?,
+        colorManagementScope: ColorManagementScope?,
+        authRequired: Bool?,
+        connectedClientCount: Int?,
+        appVersion: String?,
+        buildNumber: String?,
+        sdkVersion: String?,
+        protocolVersion: String?
+    ) {
         self.currentPatternId = currentPatternId
         self.sourceActive = sourceActive
+        self.selectedSource = selectedSource
+        self.selectedDisplayId = selectedDisplayId
+        self.colorManagementMode = colorManagementMode
+        self.colorManagementImplementationStatus = colorManagementImplementationStatus
+        self.displayProfileResolved = displayProfileResolved
+        self.colorManagementScope = colorManagementScope
+        self.authRequired = authRequired
+        self.connectedClientCount = connectedClientCount
+        self.appVersion = appVersion
+        self.buildNumber = buildNumber
+        self.sdkVersion = sdkVersion
+        self.protocolVersion = protocolVersion
     }
 }
 

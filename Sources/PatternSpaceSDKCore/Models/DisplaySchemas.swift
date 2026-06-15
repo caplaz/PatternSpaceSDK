@@ -34,6 +34,28 @@ public struct PeakWhiteRange: Codable, Sendable, Equatable {
 
 /// A single display entry returned by `display.list`.
 public struct DisplayEntry: Codable, Sendable, Equatable {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case selected
+        case connection
+        case resolution
+        case refreshRate
+        case colorSpaceName
+        case cgColorSpaceName
+        case maximumPotentialEDR
+        case maximumCurrentEDR
+        case peakWhite
+        case effectivePeakWhite
+        case peakWhiteRange
+        case supportsPeakWhiteControl
+        case colorManagementMode
+        case supportedColorManagementModes
+        case colorManagementImplementationStatus
+        case colorManagementScope
+        case displayProfileResolved
+    }
+
     /// Stable display identifier (CGDirectDisplayID on macOS, UIScreen token on iOS).
     public let id: String
 
@@ -76,6 +98,21 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
     /// Whether the app can programmatically adjust peak white for this display.
     public let supportsPeakWhiteControl: Bool
 
+    /// Host-global color-management mode currently applied to patch output.
+    public let colorManagementMode: ColorManagementMode?
+
+    /// Color-management modes this platform can advertise for this display.
+    public let supportedColorManagementModes: [ColorManagementMode]
+
+    /// Implementation path for the current color-management mode.
+    public let colorManagementImplementationStatus: ColorManagementImplementationStatus?
+
+    /// Scope affected by color-management writes.
+    public let colorManagementScope: ColorManagementScope?
+
+    /// Whether the display ICC/profile information could be resolved.
+    public let displayProfileResolved: Bool?
+
     /// Creates a display entry.
     public init(
         id: String,
@@ -93,6 +130,51 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         peakWhiteRange: PeakWhiteRange,
         supportsPeakWhiteControl: Bool
     ) {
+        self.init(
+            id: id,
+            name: name,
+            selected: selected,
+            connection: connection,
+            resolution: resolution,
+            refreshRate: refreshRate,
+            colorSpaceName: colorSpaceName,
+            cgColorSpaceName: cgColorSpaceName,
+            maximumPotentialEDR: maximumPotentialEDR,
+            maximumCurrentEDR: maximumCurrentEDR,
+            peakWhite: peakWhite,
+            effectivePeakWhite: effectivePeakWhite,
+            peakWhiteRange: peakWhiteRange,
+            supportsPeakWhiteControl: supportsPeakWhiteControl,
+            colorManagementMode: nil,
+            supportedColorManagementModes: [],
+            colorManagementImplementationStatus: nil,
+            colorManagementScope: nil,
+            displayProfileResolved: nil
+        )
+    }
+
+    /// Creates a display entry with color-management metadata.
+    public init(
+        id: String,
+        name: String,
+        selected: Bool,
+        connection: DisplayConnectionKind,
+        resolution: Resolution,
+        refreshRate: Int?,
+        colorSpaceName: String?,
+        cgColorSpaceName: String?,
+        maximumPotentialEDR: Double,
+        maximumCurrentEDR: Double,
+        peakWhite: Double,
+        effectivePeakWhite: Double,
+        peakWhiteRange: PeakWhiteRange,
+        supportsPeakWhiteControl: Bool,
+        colorManagementMode: ColorManagementMode?,
+        supportedColorManagementModes: [ColorManagementMode],
+        colorManagementImplementationStatus: ColorManagementImplementationStatus?,
+        colorManagementScope: ColorManagementScope?,
+        displayProfileResolved: Bool?
+    ) {
         self.id = id
         self.name = name
         self.selected = selected
@@ -107,6 +189,57 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.effectivePeakWhite = effectivePeakWhite
         self.peakWhiteRange = peakWhiteRange
         self.supportsPeakWhiteControl = supportsPeakWhiteControl
+        self.colorManagementMode = colorManagementMode
+        self.supportedColorManagementModes = supportedColorManagementModes
+        self.colorManagementImplementationStatus = colorManagementImplementationStatus
+        self.colorManagementScope = colorManagementScope
+        self.displayProfileResolved = displayProfileResolved
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.selected = try container.decode(Bool.self, forKey: .selected)
+        self.connection = try container.decode(DisplayConnectionKind.self, forKey: .connection)
+        self.resolution = try container.decode(Resolution.self, forKey: .resolution)
+        self.refreshRate = try container.decodeIfPresent(Int.self, forKey: .refreshRate)
+        self.colorSpaceName = try container.decodeIfPresent(String.self, forKey: .colorSpaceName)
+        self.cgColorSpaceName = try container.decodeIfPresent(String.self, forKey: .cgColorSpaceName)
+        self.maximumPotentialEDR = try container.decode(Double.self, forKey: .maximumPotentialEDR)
+        self.maximumCurrentEDR = try container.decode(Double.self, forKey: .maximumCurrentEDR)
+        self.peakWhite = try container.decode(Double.self, forKey: .peakWhite)
+        self.effectivePeakWhite = try container.decode(Double.self, forKey: .effectivePeakWhite)
+        self.peakWhiteRange = try container.decode(PeakWhiteRange.self, forKey: .peakWhiteRange)
+        self.supportsPeakWhiteControl = try container.decode(Bool.self, forKey: .supportsPeakWhiteControl)
+        self.colorManagementMode = try container.decodeIfPresent(ColorManagementMode.self, forKey: .colorManagementMode)
+        self.supportedColorManagementModes = try container.decodeIfPresent([ColorManagementMode].self, forKey: .supportedColorManagementModes) ?? []
+        self.colorManagementImplementationStatus = try container.decodeIfPresent(ColorManagementImplementationStatus.self, forKey: .colorManagementImplementationStatus)
+        self.colorManagementScope = try container.decodeIfPresent(ColorManagementScope.self, forKey: .colorManagementScope)
+        self.displayProfileResolved = try container.decodeIfPresent(Bool.self, forKey: .displayProfileResolved)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(selected, forKey: .selected)
+        try container.encode(connection, forKey: .connection)
+        try container.encode(resolution, forKey: .resolution)
+        try container.encodeIfPresent(refreshRate, forKey: .refreshRate)
+        try container.encodeIfPresent(colorSpaceName, forKey: .colorSpaceName)
+        try container.encodeIfPresent(cgColorSpaceName, forKey: .cgColorSpaceName)
+        try container.encode(maximumPotentialEDR, forKey: .maximumPotentialEDR)
+        try container.encode(maximumCurrentEDR, forKey: .maximumCurrentEDR)
+        try container.encode(peakWhite, forKey: .peakWhite)
+        try container.encode(effectivePeakWhite, forKey: .effectivePeakWhite)
+        try container.encode(peakWhiteRange, forKey: .peakWhiteRange)
+        try container.encode(supportsPeakWhiteControl, forKey: .supportsPeakWhiteControl)
+        try container.encodeIfPresent(colorManagementMode, forKey: .colorManagementMode)
+        try container.encode(supportedColorManagementModes, forKey: .supportedColorManagementModes)
+        try container.encodeIfPresent(colorManagementImplementationStatus, forKey: .colorManagementImplementationStatus)
+        try container.encodeIfPresent(colorManagementScope, forKey: .colorManagementScope)
+        try container.encodeIfPresent(displayProfileResolved, forKey: .displayProfileResolved)
     }
 }
 

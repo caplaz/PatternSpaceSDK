@@ -33,6 +33,41 @@ import Testing
         #expect(entry.peakWhiteRange.maximum == 4.0)
     }
 
+    @Test func displayEntryDecodesColorManagementFieldsAndIgnoresUnknownKeys() throws {
+        let json = """
+        {
+          "id":"69734272",
+          "name":"Studio Display",
+          "selected":true,
+          "connection":"wired",
+          "resolution":{"width":5120,"height":2880},
+          "refreshRate":60,
+          "colorSpaceName":"Display P3",
+          "cgColorSpaceName":"kCGColorSpaceDisplayP3",
+          "maximumPotentialEDR":4.0,
+          "maximumCurrentEDR":2.0,
+          "peakWhite":4.0,
+          "effectivePeakWhite":2.0,
+          "peakWhiteRange":{"minimum":0.25,"maximum":4.0},
+          "supportsPeakWhiteControl":true,
+          "colorManagementMode":"deviceNative",
+          "supportedColorManagementModes":["deviceNative","managedSRGB","managedDisplayP3","managedRec2020"],
+          "colorManagementImplementationStatus":"native",
+          "colorManagementScope":"host",
+          "displayProfileResolved":true,
+          "futureField":"ignored"
+        }
+        """
+
+        let entry = try JSONDecoder().decode(DisplayEntry.self, from: Data(json.utf8))
+
+        #expect(entry.colorManagementMode == .deviceNative)
+        #expect(entry.supportedColorManagementModes == [.deviceNative, .managedSRGB, .managedDisplayP3, .managedRec2020])
+        #expect(entry.colorManagementImplementationStatus == .native)
+        #expect(entry.colorManagementScope == .host)
+        #expect(entry.displayProfileResolved == true)
+    }
+
     @Test func displayListResultEncodesPlatformAtTopLevel() throws {
         let entry = DisplayEntry(
             id: "ios-output",
@@ -68,5 +103,7 @@ import Testing
         #expect(PSErrorCode.displayNotFound.rawValue == -32007)
         #expect(PSErrorCode.peakWhiteOutOfRange.rawValue == -32008)
         #expect(PSErrorCode.notAuthorized.rawValue == -32009)
+        #expect(PSErrorCode.colorManagementModeUnsupported.rawValue == -32010)
+        #expect(PSErrorCode.displaySelectionMismatch.rawValue == -32011)
     }
 }
