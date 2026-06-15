@@ -2,7 +2,7 @@
 
 WebSocket JSON-RPC SDK for PatternSpace integration.
 
-PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying capabilities, inspecting richer device/display state, adjusting Peak White and color-management modes, and receiving live status events.
+PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying capabilities, inspecting richer device/display state, adjusting Peak White, color-management modes, output color presets, and receiving live status events.
 
 ## Features
 
@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.4.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.4.1")
     ],
     targets: [
         .executableTarget(
@@ -99,6 +99,10 @@ if let selected = displays.displays.first(where: \.selected) {
     let modes = try await client.display.listColorManagementModes(displayId: selected.id)
     if modes.modes.contains(where: { $0.id == .managedDisplayP3 && $0.supported }) {
         _ = try await client.display.setColorManagementMode(displayId: selected.id, mode: .managedDisplayP3)
+    }
+    let presets = try await client.display.listOutputColorPresets(displayId: selected.id)
+    if presets.presets.contains(where: { $0.id == .hdrBT2020PQ && $0.supported }) {
+        _ = try await client.display.setOutputColorPreset(displayId: selected.id, presetId: .hdrBT2020PQ)
     }
 }
 try await client.pattern.clear()
@@ -180,6 +184,7 @@ final class Delegate: PatternSpaceServerDelegate {
                 displayInventory: true,
                 peakWhiteControl: true,
                 colorManagementModes: true,
+                outputColorPresets: true,
                 measurementRange: false,
                 catalogPatterns: true,
                 customICCBuilder: false,
@@ -395,6 +400,8 @@ Display methods:
 - `display.setPeakWhite`
 - `display.listColorManagementModes`
 - `display.setColorManagementMode`
+- `display.listOutputColorPresets`
+- `display.setOutputColorPreset`
 
 Notifications:
 

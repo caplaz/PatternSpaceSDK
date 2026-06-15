@@ -258,13 +258,13 @@ Sample response:
   "result": {
     "protocolVersion": "1.1",
     "app": { "name": "PatternSpace", "version": "1.1.0", "build": "1" },
-    "sdkVersion": "0.4.0",
+    "sdkVersion": "0.4.1",
     "platform": "macOS",
     "authRequired": true,
     "namespaces": {
       "capabilities": ["list"],
       "device": ["info", "status"],
-      "display": ["list", "setPeakWhite", "listColorManagementModes", "setColorManagementMode"],
+      "display": ["list", "setPeakWhite", "listColorManagementModes", "setColorManagementMode", "listOutputColorPresets", "setOutputColorPreset"],
       "pattern": ["display", "displayColor", "displayPatch", "clear", "list", "get"]
     },
     "features": {
@@ -272,6 +272,7 @@ Sample response:
       "displayInventory": true,
       "peakWhiteControl": true,
       "colorManagementModes": true,
+      "outputColorPresets": true,
       "measurementRange": false,
       "catalogPatterns": true,
       "customICCBuilder": false,
@@ -283,7 +284,7 @@ Sample response:
 
 ### `device.status`
 
-Returns current status, including active pattern id and whether the JSON source is active. Protocol `1.1` adds optional integration metadata such as selected source, selected display, color-management mode/status/scope, profile resolution, auth mode, connected client count, app version/build, SDK version, and protocol version. Decoders should ignore unknown additive fields.
+Returns current status, including active pattern id and whether the JSON source is active. Protocol `1.1` adds optional integration metadata such as selected source, selected display, color-management mode/status/scope, profile resolution, auth mode, connected client count, app version/build, SDK version, protocol version, output color preset ID/status, EDR headroom, reference white, and clip-onset diagnostics. Decoders should ignore unknown additive fields.
 
 ### Display Methods
 
@@ -329,7 +330,10 @@ Sample response:
         "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
         "colorManagementImplementationStatus": "native",
         "colorManagementScope": "host",
-        "displayProfileResolved": true
+        "displayProfileResolved": true,
+        "outputColorPresetId": "deviceNative",
+        "supportedOutputColorPresetIds": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020", "hdrP3D65PQ", "hdrBT2020PQ"],
+        "outputColorPresetImplementationStatus": "native"
       }
     ]
   }
@@ -341,6 +345,8 @@ Sample response:
 `peakWhite` is the stored EDR-relative Peak White value. `effectivePeakWhite` is the value currently in use after non-destructive clamping to the display's current capability, so it can be lower than `peakWhite`.
 
 Color-management fields are additive. On macOS, `colorManagementMode` is host-global, so every display entry reports the same mode and `colorManagementScope: "host"`. Per-entry fields such as `displayProfileResolved` are computed for that display. On platforms without writable color-management support, hosts may report `colorManagementMode: null`, `supportedColorManagementModes: []`, and `colorManagementImplementationStatus: "unsupported"`.
+
+Output color preset fields are also additive. Preset IDs are open strings. Clients should discover `supportedOutputColorPresetIds` or call `display.listOutputColorPresets` instead of assuming a closed enum. When an HDR preset is active and there is no legacy `ColorManagementMode` equivalent, hosts should report legacy `colorManagementMode`, `colorManagementImplementationStatus`, and `colorManagementScope` as `null` or omit them.
 
 ### `display.setPeakWhite`
 
@@ -491,6 +497,102 @@ Sample response:
 ```
 
 Unknown mode strings return JSON-RPC `invalidParams` (`-32602`). Known but unsupported modes return `colorManagementModeUnsupported` (`-32010`) with `requestedMode`, `supportedModes`, and `scope` in error data. If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`) with `requestedDisplayId`, `selectedDisplayId`, and `scope`.
+
+### `display.listOutputColorPresets`
+
+Returns the server-advertised output color presets for a display. Preset IDs and status vocabularies are open strings for forward compatibility.
+
+```json
+{
+  "displayId": "69734272"
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "result": {
+    "displayId": "69734272",
+    "selectedPresetId": "hdrBT2020PQ",
+    "scope": "host",
+    "presets": [
+      {
+        "id": "hdrBT2020PQ",
+        "label": "BT.2020 PQ",
+        "group": "hdr",
+        "dynamicRange": "hdr",
+        "gamut": "bt2020",
+        "whitePoint": "d65",
+        "transferFunction": "pqSt2084",
+        "measurementRange": "full",
+        "toneMapping": "none",
+        "implementationStatus": "native",
+        "supported": true,
+        "requiresPro": true,
+        "layerColorSpace": "extendedLinearITUR_2020",
+        "inputEncoding": "pqSt2084",
+        "edrHeadroomRequired": 2.0,
+        "edrHeadroomPotential": 4.0,
+        "edrHeadroomCurrent": 2.0,
+        "edrHeadroomReference": 1.0,
+        "referenceWhiteNits": 100.0,
+        "referenceWhiteNitsSource": "defaultCalibration100",
+        "peakLuminanceNits": 200.0,
+        "clipOnsetNits": 200.0,
+        "clipOnsetPQSignal": 0.579
+      }
+    ]
+  }
+}
+```
+
+`requiresPro` is discovery metadata. If a preset is supported by the display but the client is not authorized to use it, writes fail with `notAuthorized` (`-32009`).
+
+### `display.setOutputColorPreset`
+
+Sets the host-global output color preset and returns the selected display that actually changed.
+
+```json
+{
+  "displayId": "69734272",
+  "presetId": "hdrBT2020PQ"
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "scope": "host",
+    "selectedPresetId": "hdrBT2020PQ",
+    "selectedDisplayId": "69734272",
+    "display": {
+      "id": "69734272",
+      "name": "Studio Display",
+      "selected": true,
+      "connection": "wired",
+      "resolution": { "width": 5120, "height": 2880 },
+      "maximumPotentialEDR": 4.0,
+      "maximumCurrentEDR": 2.0,
+      "peakWhite": 3.0,
+      "effectivePeakWhite": 2.0,
+      "peakWhiteRange": { "minimum": 0.25, "maximum": 4.0 },
+      "supportsPeakWhiteControl": true,
+      "outputColorPresetId": "hdrBT2020PQ",
+      "supportedOutputColorPresetIds": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020", "hdrP3D65PQ", "hdrBT2020PQ"],
+      "outputColorPresetImplementationStatus": "native"
+    }
+  }
+}
+```
+
+Unknown or unavailable preset IDs return `outputColorPresetUnsupported` (`-32012`) with `requestedPresetId`, `supportedPresetIds`, `scope`, and `reason` in error data. Known reasons include `unknownPreset`, `insufficientEDRHeadroom`, and `unsupportedPlatform`. If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`).
 
 ## Notifications
 

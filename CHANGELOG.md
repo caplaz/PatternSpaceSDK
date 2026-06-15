@@ -4,6 +4,26 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.4.1] - 2026-06-15
+
+### Added
+- Flexible output color preset schemas: `OutputColorPresetID`, `OutputColorPreset`, `OutputColorPresetList`, `SetOutputColorPresetParams`, and `SetOutputColorPresetResult`
+- Additive `DisplayEntry` fields for `outputColorPresetId`, `supportedOutputColorPresetIds`, and `outputColorPresetImplementationStatus`
+- Additive `DeviceStatus` fields for selected output preset and HDR diagnostics: EDR headroom, reference white, and clip-onset values
+- `display.listOutputColorPresets` and `display.setOutputColorPreset` server routes and client display namespace methods
+- `CapabilityFeatures.outputColorPresets`
+- `PSErrorCode.outputColorPresetUnsupported`
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.4.1`
+- `PatternSpaceServerDelegate` has default unsupported implementations for output preset routes, so existing hosts can adopt `0.4.1` without immediately implementing the new API
+
+### Notes
+- Preset IDs are open strings; clients should discover presets from the server instead of hardcoding a closed enum
+- Unknown preset IDs reach `outputColorPresetUnsupported` instead of failing JSON parameter decoding
+- Pro entitlement failures should continue to use `notAuthorized` (`-32009`)
+- Legacy color-management fields remain optional and can be `null`/omitted when an HDR output preset has no `ColorManagementMode` equivalent
+
 ## [0.4.0] - 2026-06-15
 
 ### Added

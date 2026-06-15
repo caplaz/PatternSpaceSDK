@@ -48,7 +48,7 @@ import Foundation
           "connectedClientCount":1,
           "appVersion":"1.1.0",
           "buildNumber":"123",
-          "sdkVersion":"0.4.0",
+          "sdkVersion":"0.4.1",
           "protocolVersion":"1.1",
           "outputColorPresetId":"hdrBT2020PQ",
           "outputColorPresetImplementationStatus":"native",
