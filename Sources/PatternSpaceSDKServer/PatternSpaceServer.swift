@@ -41,7 +41,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
         listener.service = NWListener.Service(
             name: deviceName,
             type: "_patternspace._tcp",
-            txtRecord: NWTXTRecord(["protocolVersion": "1.0"])
+            txtRecord: NWTXTRecord(serviceTXTRecord())
         )
 
         listener.newConnectionHandler = { [weak self] connection in
@@ -141,6 +141,13 @@ public final class PatternSpaceServer: @unchecked Sendable {
         }
     }
 
+    private func serviceTXTRecord() -> [String: String] {
+        [
+            "protocolVersion": PatternSpaceProtocolMetadata.protocolVersion,
+            "authRequired": token == nil ? "false" : "true"
+        ]
+    }
+
     #if DEBUG
     /// Test-only helper that encodes an event as a JSON-RPC notification payload.
     public func encodedEventForTest(_ event: PatternSpaceEvent) throws -> Data {
@@ -148,6 +155,11 @@ public final class PatternSpaceServer: @unchecked Sendable {
             throw PSDispatchError(.internalError, message: "failed to encode notification")
         }
         return data
+    }
+
+    /// Test-only helper exposing the Bonjour TXT payload without starting a listener.
+    public func serviceTXTRecordForTest() -> [String: String] {
+        serviceTXTRecord()
     }
     #endif
 }

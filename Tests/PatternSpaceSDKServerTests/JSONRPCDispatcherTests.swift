@@ -66,6 +66,25 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
         ]
     )
     var setPeakWhiteCalls: [SetPeakWhiteParams] = []
+    var setColorManagementModeCalls: [SetColorManagementModeParams] = []
+    var capabilitiesResult = CapabilitiesResult(
+        protocolVersion: PatternSpaceProtocolMetadata.protocolVersion,
+        app: AppMetadata(name: "PatternSpace", version: "1.1.0", build: "123"),
+        sdkVersion: PatternSpaceProtocolMetadata.sdkVersion,
+        platform: .macOS,
+        authRequired: true,
+        namespaces: ["capabilities": ["list"]],
+        features: CapabilityFeatures(
+            events: true,
+            displayInventory: true,
+            peakWhiteControl: true,
+            colorManagementModes: true,
+            measurementRange: false,
+            catalogPatterns: true,
+            customICCBuilder: false,
+            httpBridge: false
+        )
+    )
 
     func listDisplays() async throws -> DisplayListResult { displayList }
 
@@ -102,6 +121,56 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
             peakWhiteRange: display.peakWhiteRange,
             supportsPeakWhiteControl: display.supportsPeakWhiteControl
         )
+    }
+
+    func capabilities() async throws -> CapabilitiesResult { capabilitiesResult }
+
+    func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList {
+        ColorManagementModeList(
+            displayId: displayId,
+            selectedMode: .deviceNative,
+            scope: .host,
+            modes: colorManagementModeEntries(displayProfileResolved: true)
+        )
+    }
+
+    func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult {
+        setColorManagementModeCalls.append(params)
+        let display = displayList.displays[0]
+        return SetColorManagementModeResult(
+            scope: .host,
+            selectedDisplayId: display.id,
+            display: DisplayEntry(
+                id: display.id,
+                name: display.name,
+                selected: display.selected,
+                connection: display.connection,
+                resolution: display.resolution,
+                refreshRate: display.refreshRate,
+                colorSpaceName: display.colorSpaceName,
+                cgColorSpaceName: display.cgColorSpaceName,
+                maximumPotentialEDR: display.maximumPotentialEDR,
+                maximumCurrentEDR: display.maximumCurrentEDR,
+                peakWhite: display.peakWhite,
+                effectivePeakWhite: display.effectivePeakWhite,
+                peakWhiteRange: display.peakWhiteRange,
+                supportsPeakWhiteControl: display.supportsPeakWhiteControl,
+                colorManagementMode: params.mode,
+                supportedColorManagementModes: ColorManagementMode.allCases,
+                colorManagementImplementationStatus: .native,
+                colorManagementScope: .host,
+                displayProfileResolved: true
+            )
+        )
+    }
+
+    private func colorManagementModeEntries(displayProfileResolved: Bool) -> [ColorManagementModeEntry] {
+        [
+            ColorManagementModeEntry(id: .deviceNative, label: "Device Native", layerColorSpace: "displayProfile", inputEncoding: .displayCode, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: displayProfileResolved),
+            ColorManagementModeEntry(id: .managedSRGB, label: "Managed sRGB", layerColorSpace: "sRGB", inputEncoding: .linearLight, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: nil),
+            ColorManagementModeEntry(id: .managedDisplayP3, label: "Managed Display P3", layerColorSpace: "displayP3", inputEncoding: .linearLight, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: nil),
+            ColorManagementModeEntry(id: .managedRec2020, label: "Managed Rec. 2020", layerColorSpace: "rec2020", inputEncoding: .linearLight, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: nil)
+        ]
     }
 }
 
@@ -346,5 +415,86 @@ func responseObject(from data: Data) throws -> JSONValue {
         #expect(data["peakWhite"]?.number == 12.0)
         #expect(data["minimum"]?.number == 0.25)
         #expect(data["maximum"]?.number == 4.0)
+    }
+
+    @Test func capabilitiesListReturnsManifestPreAuthDiscovery() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "capabilities.list", params: "{}"))
+        let obj = try responseObject(from: resp)
+        let result = try #require(obj.object?["result"]?.object)
+
+        #expect(result["authRequired"] == .bool(true))
+        #expect(result["namespaces"]?.object?["capabilities"]?.array == [.string("list")])
+    }
+
+    @Test func displayListColorManagementModesAlwaysSucceedsWithInactiveSource() async throws {
+        let mock = MockDelegate()
+        mock.isSourceActive = false
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.listColorManagementModes",
+                                            params: #"{"displayId":"69734272"}"#))
+        let obj = try responseObject(from: resp)
+        let result = try #require(obj.object?["result"]?.object)
+
+        #expect(result["selectedMode"] == .string("deviceNative"))
+        #expect(result["modes"]?.array?.count == 4)
+    }
+
+    @Test func displaySetColorManagementModeDoesNotRequireActiveSource() async throws {
+        let mock = MockDelegate()
+        mock.isSourceActive = false
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.setColorManagementMode",
+                                            params: #"{"displayId":"69734272","mode":"managedDisplayP3"}"#))
+        let obj = try responseObject(from: resp)
+        let result = try #require(obj.object?["result"]?.object)
+
+        #expect(result["scope"] == .string("host"))
+        #expect(mock.setColorManagementModeCalls == [SetColorManagementModeParams(displayId: "69734272", mode: .managedDisplayP3)])
+    }
+
+    @Test func displaySetColorManagementModeRejectsUnknownModeAsInvalidParams() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(method: "display.setColorManagementMode",
+                                            params: #"{"displayId":"69734272","mode":"bt709BT1886"}"#))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
+    }
+
+    @Test func routeManifestMethodsDispatchWithoutMethodNotFound() async throws {
+        for method in JSONRPCRoute.allCases.map(\.rawValue) {
+            let mock = MockDelegate()
+            let d = JSONRPCDispatcher(delegate: mock)
+            let resp = await d.dispatch(request(method: method, params: params(for: method)))
+            let obj = try responseObject(from: resp)
+
+            #expect(obj.object?["error"]?.object?["code"] != .int(-32601))
+        }
+    }
+
+    private func params(for method: String) -> String {
+        switch method {
+        case "pattern.display", "pattern.get":
+            return #"{"patternId":"Color-One-Red"}"#
+        case "pattern.displayColor":
+            return #"{"r":1.0,"g":0.0,"b":0.0,"bitDepth":10}"#
+        case "pattern.displayPatch":
+            return #"{"background":{"r":0.0,"g":0.0,"b":0.0},"rectangles":[{"color":{"r":1.0,"g":0.0,"b":0.0},"x":0.0,"y":0.0,"width":1.0,"height":1.0}],"bitDepth":10}"#
+        case "display.setPeakWhite":
+            return #"{"displayId":"69734272","peakWhite":3.0}"#
+        case "display.listColorManagementModes":
+            return #"{"displayId":"69734272"}"#
+        case "display.setColorManagementMode":
+            return #"{"displayId":"69734272","mode":"managedDisplayP3"}"#
+        default:
+            return "{}"
+        }
     }
 }

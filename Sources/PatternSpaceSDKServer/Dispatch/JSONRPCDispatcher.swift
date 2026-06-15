@@ -2,6 +2,30 @@
 import Foundation
 import PatternSpaceSDKCore
 
+enum JSONRPCRoute: String, CaseIterable {
+    case capabilitiesList = "capabilities.list"
+    case deviceInfo = "device.info"
+    case deviceStatus = "device.status"
+    case patternList = "pattern.list"
+    case patternGet = "pattern.get"
+    case patternDisplay = "pattern.display"
+    case patternDisplayColor = "pattern.displayColor"
+    case patternDisplayPatch = "pattern.displayPatch"
+    case patternClear = "pattern.clear"
+    case displayList = "display.list"
+    case displaySetPeakWhite = "display.setPeakWhite"
+    case displayListColorManagementModes = "display.listColorManagementModes"
+    case displaySetColorManagementMode = "display.setColorManagementMode"
+
+    var namespace: String {
+        rawValue.split(separator: ".", maxSplits: 1).map(String.init)[0]
+    }
+
+    var methodName: String {
+        rawValue.split(separator: ".", maxSplits: 1).map(String.init)[1]
+    }
+}
+
 /// Dispatches validated JSON-RPC requests to a `PatternSpaceServerDelegate`.
 ///
 /// This type owns protocol-level request validation, method routing, and
@@ -13,6 +37,15 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
     public init(delegate: any PatternSpaceServerDelegate) {
         self.delegate = delegate
     }
+
+    /// Methods advertised by `capabilities.list`, grouped by namespace.
+    public static let routeManifest: [String: [String]] = {
+        var manifest: [String: [String]] = [:]
+        for route in JSONRPCRoute.allCases {
+            manifest[route.namespace, default: []].append(route.methodName)
+        }
+        return manifest
+    }()
 
     /// Handles one raw JSON-RPC request payload and returns an encoded response.
     public func dispatch(_ data: Data) async -> Data {
@@ -63,18 +96,23 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
     // MARK: - Routing
 
     private func route(method: String, params: JSONValue?) async throws -> JSONValue {
-        switch method {
-        case "pattern.display":          return try await handleDisplay(params)
-        case "pattern.displayColor":     return try await handleDisplayColor(params)
-        case "pattern.displayPatch":     return try await handleDisplayPatch(params)
-        case "pattern.clear":            return try await handleClear()
-        case "pattern.list":             return try await handleList(params)
-        case "pattern.get":              return try await handleGet(params)
-        case "device.info":              return try await handleDeviceInfo()
-        case "device.status":            return try await handleDeviceStatus()
-        case "display.list":             return try await handleDisplayList()
-        case "display.setPeakWhite":     return try await handleSetPeakWhite(params)
-        default: throw PSDispatchError(.methodNotFound)
+        guard let route = JSONRPCRoute(rawValue: method) else {
+            throw PSDispatchError(.methodNotFound)
+        }
+        switch route {
+        case .capabilitiesList: return try await handleCapabilities()
+        case .patternDisplay: return try await handleDisplay(params)
+        case .patternDisplayColor: return try await handleDisplayColor(params)
+        case .patternDisplayPatch: return try await handleDisplayPatch(params)
+        case .patternClear: return try await handleClear()
+        case .patternList: return try await handleList(params)
+        case .patternGet: return try await handleGet(params)
+        case .deviceInfo: return try await handleDeviceInfo()
+        case .deviceStatus: return try await handleDeviceStatus()
+        case .displayList: return try await handleDisplayList()
+        case .displaySetPeakWhite: return try await handleSetPeakWhite(params)
+        case .displayListColorManagementModes: return try await handleListColorManagementModes(params)
+        case .displaySetColorManagementMode: return try await handleSetColorManagementMode(params)
         }
     }
 
@@ -203,6 +241,13 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         return try encodeToJSONValue(status)
     }
 
+    private func handleCapabilities() async throws -> JSONValue {
+        guard let capabilities = try await delegate?.capabilities() else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(capabilities)
+    }
+
     // MARK: - Display handlers
 
     private func handleDisplayList() async throws -> JSONValue {
@@ -224,6 +269,33 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
             throw PSDispatchError(.internalError)
         }
         return try encodeToJSONValue(display)
+    }
+
+    private func handleListColorManagementModes(_ params: JSONValue?) async throws -> JSONValue {
+        guard let displayId = params?.object?["displayId"]?.string, !displayId.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
+        }
+        guard let result = try await delegate?.listColorManagementModes(displayId: displayId) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(result)
+    }
+
+    private func handleSetColorManagementMode(_ params: JSONValue?) async throws -> JSONValue {
+        let obj = params?.object ?? [:]
+        guard let displayId = obj["displayId"]?.string, !displayId.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
+        }
+        guard let modeString = obj["mode"]?.string, !modeString.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "mode (string) is required")
+        }
+        guard let mode = ColorManagementMode(rawValue: modeString) else {
+            throw PSDispatchError(.invalidParams, message: "mode is not a recognized ColorManagementMode")
+        }
+        guard let result = try await delegate?.setColorManagementMode(SetColorManagementModeParams(displayId: displayId, mode: mode)) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(result)
     }
 
     // MARK: - Helpers

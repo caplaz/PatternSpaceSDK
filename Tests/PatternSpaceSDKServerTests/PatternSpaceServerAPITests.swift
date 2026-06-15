@@ -25,6 +25,30 @@ import PatternSpaceSDKCore
         withExtendedLifetime(server) {}
     }
 
+    @Test func serviceTXTRecordReportsProtocolAndAuthRequirement() {
+        let delegate = MockDelegate()
+        let server = PatternSpaceServer(token: "test-token", delegate: delegate) { authenticated in
+            ConnectionReadyParams(
+                protocolVersion: "1.0",
+                name: "PS",
+                resolution: Resolution(width: 3840, height: 2160),
+                colorFormat: "RGB",
+                bitDepth: 10,
+                hdrMode: "SDR",
+                refreshRate: 60,
+                outputRange: "full",
+                currentPatternId: nil,
+                sourceActive: true,
+                authenticated: authenticated
+            )
+        }
+
+        let record = server.serviceTXTRecordForTest()
+
+        #expect(record["protocolVersion"] == PatternSpaceProtocolMetadata.protocolVersion)
+        #expect(record["authRequired"] == "true")
+    }
+
     @Test func displayChangedNotificationUsesDisplayListPayload() throws {
         let result = DisplayListResult(
             platform: .macOS,

@@ -36,11 +36,20 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Returns runtime state for the host app.
     func deviceStatus() async throws -> DeviceStatus
 
+    /// Returns protocol, route, and feature metadata for integrators.
+    func capabilities() async throws -> CapabilitiesResult
+
     /// Returns display inventory and selected display metadata.
     func listDisplays() async throws -> DisplayListResult
 
     /// Sets Peak White for one display and returns the updated record.
     func setPeakWhite(_ params: SetPeakWhiteParams) async throws -> DisplayEntry
+
+    /// Lists available color-management modes for a display.
+    func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList
+
+    /// Sets the host-global color-management mode when the display matches selected output.
+    func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult
 
     // MARK: Source state
 
