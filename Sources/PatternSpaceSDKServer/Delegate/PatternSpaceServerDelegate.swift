@@ -8,7 +8,7 @@ import PatternSpaceSDKCore
 /// `isSourceActive` is `true`.
 public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
 
-    // MARK: Write — only invoked when isSourceActive == true
+    // MARK: Pattern write — only invoked when isSourceActive == true
 
     /// Displays an app-provided pattern by protocol identifier.
     func displayPattern(id: String) async throws
@@ -43,12 +43,16 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     func listDisplays() async throws -> DisplayListResult
 
     /// Sets Peak White for one display and returns the updated record.
+    ///
+    /// Display configuration writes do not require the JSON source to be active.
     func setPeakWhite(_ params: SetPeakWhiteParams) async throws -> DisplayEntry
 
     /// Lists available color-management modes for a display.
     func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList
 
     /// Sets the host-global color-management mode when the display matches selected output.
+    ///
+    /// Display configuration writes do not require the JSON source to be active.
     func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult
 
     // MARK: Source state

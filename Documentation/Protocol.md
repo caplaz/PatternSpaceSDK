@@ -12,7 +12,7 @@ Bonjour service type:
 _patternspace._tcp
 ```
 
-The server advertises `protocolVersion=1.0` in the TXT record.
+The server advertises `protocolVersion=1.1` and `authRequired=true|false` in the TXT record.
 
 ## Authentication
 
@@ -23,6 +23,8 @@ Authorization: Bearer <token>
 ```
 
 Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients receive `101 Switching Protocols`.
+
+When auth is required, unauthenticated clients are rejected during the WebSocket upgrade before JSON-RPC dispatch. Clients can still discover whether auth is required from the Bonjour TXT record.
 
 ## Request Envelope
 
@@ -239,13 +241,53 @@ Sample response:
 
 Returns static device information such as name, resolution, color format, bit depth, HDR mode, refresh rate, and output range.
 
+### `capabilities.list`
+
+Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integrators should call this after connecting to discover the server's supported namespaces.
+
+```json
+{}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "protocolVersion": "1.1",
+    "app": { "name": "PatternSpace", "version": "1.1.0", "build": "1" },
+    "sdkVersion": "0.4.0",
+    "platform": "macOS",
+    "authRequired": true,
+    "namespaces": {
+      "capabilities": ["list"],
+      "device": ["info", "status"],
+      "display": ["list", "setPeakWhite", "listColorManagementModes", "setColorManagementMode"],
+      "pattern": ["display", "displayColor", "displayPatch", "clear", "list", "get"]
+    },
+    "features": {
+      "events": true,
+      "displayInventory": true,
+      "peakWhiteControl": true,
+      "colorManagementModes": true,
+      "measurementRange": false,
+      "catalogPatterns": true,
+      "customICCBuilder": false,
+      "httpBridge": false
+    }
+  }
+}
+```
+
 ### `device.status`
 
-Returns current status, including active pattern id and whether the JSON source is active.
+Returns current status, including active pattern id and whether the JSON source is active. Protocol `1.1` adds optional integration metadata such as selected source, selected display, color-management mode/status/scope, profile resolution, auth mode, connected client count, app version/build, SDK version, and protocol version. Decoders should ignore unknown additive fields.
 
 ### Display Methods
 
-These methods expose display inventory and Peak White control. They are authenticated when the server requires a token, but they do not require the JSON source to be active.
+These methods expose display inventory, Peak White control, and color-management mode control. They are authenticated when the server requires a token, but they do not require the JSON source to be active.
 
 ### `display.list`
 
@@ -282,7 +324,12 @@ Sample response:
           "minimum": 0.25,
           "maximum": 4.0
         },
-        "supportsPeakWhiteControl": true
+        "supportsPeakWhiteControl": true,
+        "colorManagementMode": "deviceNative",
+        "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
+        "colorManagementImplementationStatus": "native",
+        "colorManagementScope": "host",
+        "displayProfileResolved": true
       }
     ]
   }
@@ -292,6 +339,8 @@ Sample response:
 `platform` is `macOS` or `iOS`. `connection` is `builtIn`, `wired`, `airPlay`, or `unknown`; `unknown` is reserved for defensive fallback when a host cannot classify a display. On iOS, external outputs report `wired` for USB/HDMI-style connections or `airPlay` for AirPlay routes.
 
 `peakWhite` is the stored EDR-relative Peak White value. `effectivePeakWhite` is the value currently in use after non-destructive clamping to the display's current capability, so it can be lower than `peakWhite`.
+
+Color-management fields are additive. On macOS, `colorManagementMode` is host-global, so every display entry reports the same mode and `colorManagementScope: "host"`. Per-entry fields such as `displayProfileResolved` are computed for that display. On platforms without writable color-management support, hosts may report `colorManagementMode: null`, `supportedColorManagementModes: []`, and `colorManagementImplementationStatus: "unsupported"`.
 
 ### `display.setPeakWhite`
 
@@ -327,7 +376,12 @@ Sample response:
       "minimum": 0.25,
       "maximum": 4.0
     },
-    "supportsPeakWhiteControl": true
+    "supportsPeakWhiteControl": true,
+    "colorManagementMode": "deviceNative",
+    "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
+    "colorManagementImplementationStatus": "native",
+    "colorManagementScope": "host",
+    "displayProfileResolved": true
   }
 }
 ```
@@ -353,6 +407,91 @@ Sample response:
 
 Other display errors include `displayNotFound` (`-32007`) and `notAuthorized` (`-32009`).
 
+### `display.listColorManagementModes`
+
+Returns the advertised color-management modes for a display and the selected host-global mode.
+
+```json
+{
+  "displayId": "69734272"
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "displayId": "69734272",
+    "selectedMode": "deviceNative",
+    "scope": "host",
+    "modes": [
+      {
+        "id": "deviceNative",
+        "label": "Device Native",
+        "layerColorSpace": "displayProfile",
+        "inputEncoding": "displayCode",
+        "implementationStatus": "native",
+        "supported": true,
+        "requiresPro": true,
+        "displayProfileResolved": true
+      }
+    ]
+  }
+}
+```
+
+Mode ids are `deviceNative`, `managedSRGB`, `managedDisplayP3`, and `managedRec2020`. `requiresPro` is per-mode for forward compatibility even if a host currently gates all modes together.
+
+### `display.setColorManagementMode`
+
+Sets the host-global color-management mode and returns the selected display that actually changed.
+
+```json
+{
+  "displayId": "69734272",
+  "mode": "managedDisplayP3"
+}
+```
+
+Sample response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "scope": "host",
+    "selectedDisplayId": "69734272",
+    "display": {
+      "id": "69734272",
+      "name": "Studio Display",
+      "selected": true,
+      "connection": "wired",
+      "resolution": { "width": 5120, "height": 2880 },
+      "refreshRate": 60,
+      "colorSpaceName": "Display P3",
+      "cgColorSpaceName": "kCGColorSpaceDisplayP3",
+      "maximumPotentialEDR": 4.0,
+      "maximumCurrentEDR": 2.0,
+      "peakWhite": 3.0,
+      "effectivePeakWhite": 2.0,
+      "peakWhiteRange": { "minimum": 0.25, "maximum": 4.0 },
+      "supportsPeakWhiteControl": true,
+      "colorManagementMode": "managedDisplayP3",
+      "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
+      "colorManagementImplementationStatus": "native",
+      "colorManagementScope": "host",
+      "displayProfileResolved": true
+    }
+  }
+}
+```
+
+Unknown mode strings return JSON-RPC `invalidParams` (`-32602`). Known but unsupported modes return `colorManagementModeUnsupported` (`-32010`) with `requestedMode`, `supportedModes`, and `scope` in error data. If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`) with `requestedDisplayId`, `selectedDisplayId`, and `scope`.
+
 ## Notifications
 
 ### `connectionReady`
@@ -371,7 +510,7 @@ Sent when device state changes.
 
 ### `display.changed`
 
-Sent when display inventory, selected display, or Peak White values change. The payload has the same shape as a `display.list` result.
+Sent when display inventory, selected display, Peak White values, or color-management fields change. The payload has the same shape as a `display.list` result.
 
 ```json
 {

@@ -4,6 +4,28 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.4.0] - 2026-06-15
+
+### Added
+- `PatternSpaceProtocolMetadata` with protocol version `1.1` and SDK version `0.4.0`
+- `capabilities.list` route and `PatternSpaceClient.capabilities.list()` for protocol, app, SDK, namespace, feature, platform, and auth discovery
+- Bonjour TXT metadata for `protocolVersion` and `authRequired`
+- Richer optional `DeviceStatus` metadata: selected source/display, color-management state, profile resolution, auth mode, client count, app version/build, SDK version, and protocol version
+- Color-management schemas: `ColorManagementMode`, `ColorManagementModeEntry`, `ColorManagementModeList`, `SetColorManagementModeParams`, and `SetColorManagementModeResult`
+- Additive `DisplayEntry` color-management fields, with forward-compatible decoding for unknown keys and absent mode arrays
+- `display.listColorManagementModes` and `display.setColorManagementMode` server routes and client display namespace methods
+- `PSErrorCode.colorManagementModeUnsupported` and `.displaySelectionMismatch`
+- Route-manifest coverage to keep `capabilities.list` namespaces aligned with dispatcher routes
+
+### Changed
+- PatternSpace JSON protocol version is now `1.1`
+- `PatternSpaceServerDelegate` adds `capabilities()`, `listColorManagementModes(displayId:)`, and `setColorManagementMode(_:)` host hooks — **source-breaking** for server delegate conformers
+
+### Notes
+- `capabilities.list`, `display.listColorManagementModes`, and `display.setColorManagementMode` do not require the JSON source to be active after a WebSocket connection is established
+- Unknown color-management mode strings return JSON-RPC `invalidParams`; known but unsupported modes return `colorManagementModeUnsupported`
+- Display color-management writes are host-scoped in this release, so hosts should return the selected display that actually changed
+
 ## [0.3.0] - 2026-06-03
 
 ### Added
