@@ -31,4 +31,20 @@ public final class DisplayNamespace: Sendable {
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode(DisplayEntry.self, from: data)
     }
+
+    /// Lists available color-management modes for the specified display.
+    public func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList {
+        struct Params: Encodable { let displayId: String }
+        let result = try await session.send(method: "display.listColorManagementModes", params: Params(displayId: displayId), via: transport)
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(ColorManagementModeList.self, from: data)
+    }
+
+    /// Sets the host-global color-management mode for the selected display.
+    public func setColorManagementMode(displayId: String, mode: ColorManagementMode) async throws -> SetColorManagementModeResult {
+        let params = SetColorManagementModeParams(displayId: displayId, mode: mode)
+        let result = try await session.send(method: "display.setColorManagementMode", params: params, via: transport)
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(SetColorManagementModeResult.self, from: data)
+    }
 }
