@@ -67,6 +67,7 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
     )
     var setPeakWhiteCalls: [SetPeakWhiteParams] = []
     var setColorManagementModeCalls: [SetColorManagementModeParams] = []
+    var setOutputColorPresetCalls: [SetOutputColorPresetParams] = []
     var capabilitiesResult = CapabilitiesResult(
         protocolVersion: PatternSpaceProtocolMetadata.protocolVersion,
         app: AppMetadata(name: "PatternSpace", version: "1.1.0", build: "123"),
@@ -161,6 +162,41 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
                 colorManagementScope: .host,
                 displayProfileResolved: true
             )
+        )
+    }
+
+    func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
+        OutputColorPresetList(
+            displayId: displayId,
+            selectedPresetId: .hdrBT2020PQ,
+            scope: .host,
+            presets: [
+                OutputColorPreset(
+                    id: .hdrBT2020PQ,
+                    label: "BT.2020 PQ",
+                    group: "hdr",
+                    dynamicRange: "hdr",
+                    gamut: "bt2020",
+                    whitePoint: "d65",
+                    transferFunction: "pqSt2084",
+                    measurementRange: "full",
+                    toneMapping: "none",
+                    implementationStatus: "native",
+                    supported: true,
+                    requiresPro: true
+                )
+            ]
+        )
+    }
+
+    func setOutputColorPreset(_ params: SetOutputColorPresetParams) async throws -> SetOutputColorPresetResult {
+        setOutputColorPresetCalls.append(params)
+        let display = displayList.displays[0]
+        return SetOutputColorPresetResult(
+            scope: .host,
+            selectedPresetId: params.presetId,
+            selectedDisplayId: display.id,
+            display: display
         )
     }
 
@@ -468,6 +504,40 @@ func responseObject(from data: Data) throws -> JSONValue {
         #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
     }
 
+    @Test func routeManifestIncludesOutputColorPresetRoutes() {
+        #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("listOutputColorPresets") == true)
+        #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("setOutputColorPreset") == true)
+    }
+
+    @Test func displayListOutputColorPresetsDispatchesOpenStringIDs() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(
+            method: "display.listOutputColorPresets",
+            params: #"{"displayId":"69734272"}"#
+        ))
+        let obj = try responseObject(from: resp)
+        let result = try #require(obj.object?["result"]?.object)
+
+        #expect(result["selectedPresetId"] == .string("hdrBT2020PQ"))
+        #expect(result["presets"]?.array?.first?.object?["id"] == .string("hdrBT2020PQ"))
+    }
+
+    @Test func displaySetOutputColorPresetDispatchesUnknownStringToDelegate() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(
+            method: "display.setOutputColorPreset",
+            params: #"{"displayId":"69734272","presetId":"vendor.future"}"#
+        ))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["result"] != nil)
+        #expect(mock.setOutputColorPresetCalls.first?.presetId.rawValue == "vendor.future")
+    }
+
     @Test func routeManifestMethodsDispatchWithoutMethodNotFound() async throws {
         for method in JSONRPCRoute.allCases.map(\.rawValue) {
             let mock = MockDelegate()
@@ -493,6 +563,10 @@ func responseObject(from data: Data) throws -> JSONValue {
             return #"{"displayId":"69734272"}"#
         case "display.setColorManagementMode":
             return #"{"displayId":"69734272","mode":"managedDisplayP3"}"#
+        case "display.listOutputColorPresets":
+            return #"{"displayId":"69734272"}"#
+        case "display.setOutputColorPreset":
+            return #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
         default:
             return "{}"
         }

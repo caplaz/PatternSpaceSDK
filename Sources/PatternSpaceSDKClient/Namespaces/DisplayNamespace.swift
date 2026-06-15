@@ -47,4 +47,31 @@ public final class DisplayNamespace: Sendable {
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode(SetColorManagementModeResult.self, from: data)
     }
+
+    /// Lists available output color presets for the specified display.
+    public func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
+        struct Params: Encodable { let displayId: String }
+        let result = try await session.send(
+            method: "display.listOutputColorPresets",
+            params: Params(displayId: displayId),
+            via: transport
+        )
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(OutputColorPresetList.self, from: data)
+    }
+
+    /// Sets the host-global output color preset for the selected display.
+    public func setOutputColorPreset(
+        displayId: String,
+        presetId: OutputColorPresetID
+    ) async throws -> SetOutputColorPresetResult {
+        let params = SetOutputColorPresetParams(displayId: displayId, presetId: presetId)
+        let result = try await session.send(
+            method: "display.setOutputColorPreset",
+            params: params,
+            via: transport
+        )
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(SetOutputColorPresetResult.self, from: data)
+    }
 }

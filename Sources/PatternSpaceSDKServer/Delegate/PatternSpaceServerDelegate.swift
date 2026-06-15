@@ -55,9 +55,35 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Display configuration writes do not require the JSON source to be active.
     func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult
 
+    /// Lists output color presets for a display.
+    func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList
+
+    /// Sets the host-global output color preset when the display matches selected output.
+    ///
+    /// Display configuration writes do not require the JSON source to be active.
+    func setOutputColorPreset(_ params: SetOutputColorPresetParams) async throws -> SetOutputColorPresetResult
+
     // MARK: Source state
 
     /// Returns true when the JSON source is the currently selected PatternSourceSelection.
     var isSourceActive: Bool { get }
 
+}
+
+public extension PatternSpaceServerDelegate {
+    func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
+        OutputColorPresetList(displayId: displayId, selectedPresetId: nil, scope: .host, presets: [])
+    }
+
+    func setOutputColorPreset(_ params: SetOutputColorPresetParams) async throws -> SetOutputColorPresetResult {
+        throw PSDispatchError(
+            .outputColorPresetUnsupported,
+            data: .object([
+                "requestedPresetId": .string(params.presetId.rawValue),
+                "supportedPresetIds": .array([]),
+                "scope": .string(ColorManagementScope.host.rawValue),
+                "reason": .string("unsupportedPlatform")
+            ])
+        )
+    }
 }
