@@ -89,6 +89,33 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
     /// PatternSpace JSON protocol version used by the host, if reported.
     public let protocolVersion: String?
 
+    /// Host-global output color preset currently selected, if reported.
+    public let outputColorPresetId: OutputColorPresetID?
+
+    /// Open-string implementation status for the selected output color preset.
+    public let outputColorPresetImplementationStatus: String?
+
+    /// Maximum potential EDR headroom for the selected output display.
+    public let edrHeadroomPotential: Double?
+
+    /// Current EDR headroom for the selected output display.
+    public let edrHeadroomCurrent: Double?
+
+    /// Reference EDR headroom reported by the selected output display.
+    public let edrHeadroomReference: Double?
+
+    /// Assumed absolute luminance of EDR 1.0, in nits.
+    public let referenceWhiteNits: Double?
+
+    /// Source of the reference-white assumption.
+    public let referenceWhiteNitsSource: String?
+
+    /// Absolute luminance where current EDR output clips, in nits.
+    public let clipOnsetNits: Double?
+
+    /// Normalized PQ/ST 2084 signal value where current EDR output clips.
+    public let clipOnsetPQSignal: Double?
+
     /// Creates a runtime status value.
     public init(currentPatternId: String?, sourceActive: Bool) {
         self.init(
@@ -105,7 +132,16 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
             appVersion: nil,
             buildNumber: nil,
             sdkVersion: nil,
-            protocolVersion: nil
+            protocolVersion: nil,
+            outputColorPresetId: nil,
+            outputColorPresetImplementationStatus: nil,
+            edrHeadroomPotential: nil,
+            edrHeadroomCurrent: nil,
+            edrHeadroomReference: nil,
+            referenceWhiteNits: nil,
+            referenceWhiteNitsSource: nil,
+            clipOnsetNits: nil,
+            clipOnsetPQSignal: nil
         )
     }
 
@@ -124,7 +160,16 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         appVersion: String?,
         buildNumber: String?,
         sdkVersion: String?,
-        protocolVersion: String?
+        protocolVersion: String?,
+        outputColorPresetId: OutputColorPresetID? = nil,
+        outputColorPresetImplementationStatus: String? = nil,
+        edrHeadroomPotential: Double? = nil,
+        edrHeadroomCurrent: Double? = nil,
+        edrHeadroomReference: Double? = nil,
+        referenceWhiteNits: Double? = nil,
+        referenceWhiteNitsSource: String? = nil,
+        clipOnsetNits: Double? = nil,
+        clipOnsetPQSignal: Double? = nil
     ) {
         self.currentPatternId = currentPatternId
         self.sourceActive = sourceActive
@@ -140,6 +185,15 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         self.buildNumber = buildNumber
         self.sdkVersion = sdkVersion
         self.protocolVersion = protocolVersion
+        self.outputColorPresetId = outputColorPresetId
+        self.outputColorPresetImplementationStatus = outputColorPresetImplementationStatus
+        self.edrHeadroomPotential = edrHeadroomPotential
+        self.edrHeadroomCurrent = edrHeadroomCurrent
+        self.edrHeadroomReference = edrHeadroomReference
+        self.referenceWhiteNits = referenceWhiteNits
+        self.referenceWhiteNitsSource = referenceWhiteNitsSource
+        self.clipOnsetNits = clipOnsetNits
+        self.clipOnsetPQSignal = clipOnsetPQSignal
     }
 }
 

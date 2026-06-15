@@ -48,6 +48,9 @@ public enum PSErrorCode: Int, Sendable {
     /// Requested display does not match the host-global selected output display.
     case displaySelectionMismatch = -32011
 
+    /// Requested output color preset is not supported on this platform or display.
+    case outputColorPresetUnsupported = -32012
+
     /// Default message paired with this error code.
     public var defaultMessage: String {
         switch self {
@@ -66,6 +69,7 @@ public enum PSErrorCode: Int, Sendable {
         case .notAuthorized: return "Not authorized"
         case .colorManagementModeUnsupported: return "Color management mode unsupported"
         case .displaySelectionMismatch: return "Display selection mismatch"
+        case .outputColorPresetUnsupported: return "Output color preset unsupported"
         }
     }
 }

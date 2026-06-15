@@ -54,6 +54,9 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         case colorManagementImplementationStatus
         case colorManagementScope
         case displayProfileResolved
+        case outputColorPresetId
+        case supportedOutputColorPresetIds
+        case outputColorPresetImplementationStatus
     }
 
     /// Stable display identifier (CGDirectDisplayID on macOS, UIScreen token on iOS).
@@ -113,6 +116,15 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
     /// Whether the display ICC/profile information could be resolved.
     public let displayProfileResolved: Bool?
 
+    /// Host-global output color preset currently applied to patch output.
+    public let outputColorPresetId: OutputColorPresetID?
+
+    /// Output color preset IDs currently supported for this display.
+    public let supportedOutputColorPresetIds: [OutputColorPresetID]
+
+    /// Open-string implementation status for the selected output color preset.
+    public let outputColorPresetImplementationStatus: String?
+
     /// Creates a display entry.
     public init(
         id: String,
@@ -149,7 +161,10 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
             supportedColorManagementModes: [],
             colorManagementImplementationStatus: nil,
             colorManagementScope: nil,
-            displayProfileResolved: nil
+            displayProfileResolved: nil,
+            outputColorPresetId: nil,
+            supportedOutputColorPresetIds: [],
+            outputColorPresetImplementationStatus: nil
         )
     }
 
@@ -173,7 +188,10 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         supportedColorManagementModes: [ColorManagementMode],
         colorManagementImplementationStatus: ColorManagementImplementationStatus?,
         colorManagementScope: ColorManagementScope?,
-        displayProfileResolved: Bool?
+        displayProfileResolved: Bool?,
+        outputColorPresetId: OutputColorPresetID? = nil,
+        supportedOutputColorPresetIds: [OutputColorPresetID] = [],
+        outputColorPresetImplementationStatus: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -194,6 +212,9 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.colorManagementImplementationStatus = colorManagementImplementationStatus
         self.colorManagementScope = colorManagementScope
         self.displayProfileResolved = displayProfileResolved
+        self.outputColorPresetId = outputColorPresetId
+        self.supportedOutputColorPresetIds = supportedOutputColorPresetIds
+        self.outputColorPresetImplementationStatus = outputColorPresetImplementationStatus
     }
 
     public init(from decoder: Decoder) throws {
@@ -217,6 +238,9 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.colorManagementImplementationStatus = try container.decodeIfPresent(ColorManagementImplementationStatus.self, forKey: .colorManagementImplementationStatus)
         self.colorManagementScope = try container.decodeIfPresent(ColorManagementScope.self, forKey: .colorManagementScope)
         self.displayProfileResolved = try container.decodeIfPresent(Bool.self, forKey: .displayProfileResolved)
+        self.outputColorPresetId = try container.decodeIfPresent(OutputColorPresetID.self, forKey: .outputColorPresetId)
+        self.supportedOutputColorPresetIds = try container.decodeIfPresent([OutputColorPresetID].self, forKey: .supportedOutputColorPresetIds) ?? []
+        self.outputColorPresetImplementationStatus = try container.decodeIfPresent(String.self, forKey: .outputColorPresetImplementationStatus)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -240,6 +264,9 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         try container.encodeIfPresent(colorManagementImplementationStatus, forKey: .colorManagementImplementationStatus)
         try container.encodeIfPresent(colorManagementScope, forKey: .colorManagementScope)
         try container.encodeIfPresent(displayProfileResolved, forKey: .displayProfileResolved)
+        try container.encodeIfPresent(outputColorPresetId, forKey: .outputColorPresetId)
+        try container.encode(supportedOutputColorPresetIds, forKey: .supportedOutputColorPresetIds)
+        try container.encodeIfPresent(outputColorPresetImplementationStatus, forKey: .outputColorPresetImplementationStatus)
     }
 }
 

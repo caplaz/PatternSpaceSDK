@@ -50,6 +50,15 @@ import Foundation
           "buildNumber":"123",
           "sdkVersion":"0.4.0",
           "protocolVersion":"1.1",
+          "outputColorPresetId":"hdrBT2020PQ",
+          "outputColorPresetImplementationStatus":"native",
+          "edrHeadroomPotential":4.0,
+          "edrHeadroomCurrent":2.0,
+          "edrHeadroomReference":1.0,
+          "referenceWhiteNits":100.0,
+          "referenceWhiteNitsSource":"defaultCalibration100",
+          "clipOnsetNits":200.0,
+          "clipOnsetPQSignal":0.579,
           "futureField":"ignored"
         }
         """
@@ -67,6 +76,15 @@ import Foundation
         #expect(status.buildNumber == "123")
         #expect(status.sdkVersion == PatternSpaceProtocolMetadata.sdkVersion)
         #expect(status.protocolVersion == PatternSpaceProtocolMetadata.protocolVersion)
+        #expect(status.outputColorPresetId == .hdrBT2020PQ)
+        #expect(status.outputColorPresetImplementationStatus == "native")
+        #expect(status.edrHeadroomPotential == 4.0)
+        #expect(status.edrHeadroomCurrent == 2.0)
+        #expect(status.edrHeadroomReference == 1.0)
+        #expect(status.referenceWhiteNits == 100.0)
+        #expect(status.referenceWhiteNitsSource == "defaultCalibration100")
+        #expect(status.clipOnsetNits == 200.0)
+        #expect(status.clipOnsetPQSignal == 0.579)
     }
     @Test func deviceStatusEncodingOmitsConnectedClients() throws {
         let status = DeviceStatus(currentPatternId: nil, sourceActive: true)
