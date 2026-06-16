@@ -170,20 +170,16 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
             displayId: displayId,
             selectedPresetId: .hdrBT2020PQ,
             scope: .host,
+            catalogRevision: "test-catalog",
             presets: [
-                OutputColorPreset(
+                OutputColorPresetSummary(
                     id: .hdrBT2020PQ,
                     label: "BT.2020 PQ",
                     group: "hdr",
-                    dynamicRange: "hdr",
-                    gamut: "bt2020",
-                    whitePoint: "d65",
-                    transferFunction: "pqSt2084",
-                    measurementRange: "full",
-                    toneMapping: "none",
-                    implementationStatus: "native",
+                    family: .hdrReference,
                     supported: true,
-                    requiresPro: true
+                    requiresPro: true,
+                    implementationStatus: .native
                 )
             ]
         )
