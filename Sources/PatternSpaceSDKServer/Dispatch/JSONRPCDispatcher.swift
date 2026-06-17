@@ -14,9 +14,8 @@ enum JSONRPCRoute: String, CaseIterable {
     case patternClear = "pattern.clear"
     case displayList = "display.list"
     case displaySetPeakWhite = "display.setPeakWhite"
-    case displayListColorManagementModes = "display.listColorManagementModes"
-    case displaySetColorManagementMode = "display.setColorManagementMode"
     case displayListOutputColorPresets = "display.listOutputColorPresets"
+    case displayGetOutputColorPreset = "display.getOutputColorPreset"
     case displaySetOutputColorPreset = "display.setOutputColorPreset"
 
     var namespace: String {
@@ -113,9 +112,8 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         case .deviceStatus: return try await handleDeviceStatus()
         case .displayList: return try await handleDisplayList()
         case .displaySetPeakWhite: return try await handleSetPeakWhite(params)
-        case .displayListColorManagementModes: return try await handleListColorManagementModes(params)
-        case .displaySetColorManagementMode: return try await handleSetColorManagementMode(params)
         case .displayListOutputColorPresets: return try await handleListOutputColorPresets(params)
+        case .displayGetOutputColorPreset: return try await handleGetOutputColorPreset(params)
         case .displaySetOutputColorPreset: return try await handleSetOutputColorPreset(params)
         }
     }
@@ -275,38 +273,30 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         return try encodeToJSONValue(display)
     }
 
-    private func handleListColorManagementModes(_ params: JSONValue?) async throws -> JSONValue {
-        guard let displayId = params?.object?["displayId"]?.string, !displayId.isEmpty else {
-            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
-        }
-        guard let result = try await delegate?.listColorManagementModes(displayId: displayId) else {
-            throw PSDispatchError(.internalError)
-        }
-        return try encodeToJSONValue(result)
-    }
-
-    private func handleSetColorManagementMode(_ params: JSONValue?) async throws -> JSONValue {
-        let obj = params?.object ?? [:]
-        guard let displayId = obj["displayId"]?.string, !displayId.isEmpty else {
-            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
-        }
-        guard let modeString = obj["mode"]?.string, !modeString.isEmpty else {
-            throw PSDispatchError(.invalidParams, message: "mode (string) is required")
-        }
-        guard let mode = ColorManagementMode(rawValue: modeString) else {
-            throw PSDispatchError(.invalidParams, message: "mode is not a recognized ColorManagementMode")
-        }
-        guard let result = try await delegate?.setColorManagementMode(SetColorManagementModeParams(displayId: displayId, mode: mode)) else {
-            throw PSDispatchError(.internalError)
-        }
-        return try encodeToJSONValue(result)
-    }
-
     private func handleListOutputColorPresets(_ params: JSONValue?) async throws -> JSONValue {
         guard let displayId = params?.object?["displayId"]?.string, !displayId.isEmpty else {
             throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
         }
         guard let result = try await delegate?.listOutputColorPresets(displayId: displayId) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(result)
+    }
+
+    private func handleGetOutputColorPreset(_ params: JSONValue?) async throws -> JSONValue {
+        let obj = params?.object ?? [:]
+        guard let displayId = obj["displayId"]?.string, !displayId.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
+        }
+        guard let presetId = obj["presetId"]?.string, !presetId.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "presetId (string) is required")
+        }
+        guard let result = try await delegate?.getOutputColorPreset(
+            GetOutputColorPresetParams(
+                displayId: displayId,
+                presetId: OutputColorPresetID(rawValue: presetId)
+            )
+        ) else {
             throw PSDispatchError(.internalError)
         }
         return try encodeToJSONValue(result)

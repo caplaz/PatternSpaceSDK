@@ -4,6 +4,30 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.5.0] - 2026-06-17
+
+### Added
+- `display.getOutputColorPreset` server route, client namespace method, delegate hook, params, and result schemas
+- `OutputColorPresetSummary` for lightweight discovery and `OutputColorPresetConfig` for full self-describing preset configuration
+- `catalogRevision` on both list and get preset responses, defined as an opaque host-catalog cache token
+- Open-string preset metadata wrappers for family, gamut, white point, transfer, input encoding, dynamic range, tone mapping, measurement range, and implementation status
+
+### Changed
+- PatternSpace JSON protocol version is now `1.2`
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.5.0`
+- `display.listOutputColorPresets` now returns lightweight summaries only; clients should call `display.getOutputColorPreset` when they need full color-science configuration
+- Hosts must return full config for known presets even when the current display does not support them; unknown IDs remain `outputColorPresetUnsupported`
+
+### Removed
+- Legacy closed color-management mode API: `ColorManagementMode`, mode list/set schemas, delegate hooks, client methods, dispatcher routes, capability flag, and `colorManagementModeUnsupported`
+- Legacy color-management fields from `DeviceStatus` and `DisplayEntry`; use output preset fields instead
+
+### Migration
+- Replace `display.listColorManagementModes` and `display.setColorManagementMode` with the output preset catalog flow: list summaries, fetch config for a selected ID, then set the preset
+- Treat preset IDs and metadata values as open strings; SDK constants are conveniences, not a closed catalog
+- Cache full configs by `(presetId, catalogRevision)` when useful
+- Continue using `notAuthorized` (`-32009`) for Pro entitlement failures
+
 ## [0.4.1] - 2026-06-15
 
 ### Added

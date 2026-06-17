@@ -42,9 +42,6 @@ public enum PSErrorCode: Int, Sendable {
     /// Client is authenticated but not authorized for this operation.
     case notAuthorized = -32009
 
-    /// Requested color-management mode is not supported on this platform or display.
-    case colorManagementModeUnsupported = -32010
-
     /// Requested display does not match the host-global selected output display.
     case displaySelectionMismatch = -32011
 
@@ -67,7 +64,6 @@ public enum PSErrorCode: Int, Sendable {
         case .displayNotFound: return "Display not found"
         case .peakWhiteOutOfRange: return "Peak White out of range"
         case .notAuthorized: return "Not authorized"
-        case .colorManagementModeUnsupported: return "Color management mode unsupported"
         case .displaySelectionMismatch: return "Display selection mismatch"
         case .outputColorPresetUnsupported: return "Output color preset unsupported"
         }

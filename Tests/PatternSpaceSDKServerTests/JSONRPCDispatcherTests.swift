@@ -66,8 +66,10 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
         ]
     )
     var setPeakWhiteCalls: [SetPeakWhiteParams] = []
-    var setColorManagementModeCalls: [SetColorManagementModeParams] = []
     var setOutputColorPresetCalls: [SetOutputColorPresetParams] = []
+    var getOutputColorPresetCalls: [GetOutputColorPresetParams] = []
+    var unknownOutputPresetIds: Set<OutputColorPresetID> = []
+    var unsupportedOutputPresetConfig: OutputColorPresetConfig?
     var capabilitiesResult = CapabilitiesResult(
         protocolVersion: PatternSpaceProtocolMetadata.protocolVersion,
         app: AppMetadata(name: "PatternSpace", version: "1.1.0", build: "123"),
@@ -79,7 +81,7 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
             events: true,
             displayInventory: true,
             peakWhiteControl: true,
-            colorManagementModes: true,
+            outputColorPresets: true,
             measurementRange: false,
             catalogPatterns: true,
             customICCBuilder: false,
@@ -126,45 +128,6 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
 
     func capabilities() async throws -> CapabilitiesResult { capabilitiesResult }
 
-    func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList {
-        ColorManagementModeList(
-            displayId: displayId,
-            selectedMode: .deviceNative,
-            scope: .host,
-            modes: colorManagementModeEntries(displayProfileResolved: true)
-        )
-    }
-
-    func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult {
-        setColorManagementModeCalls.append(params)
-        let display = displayList.displays[0]
-        return SetColorManagementModeResult(
-            scope: .host,
-            selectedDisplayId: display.id,
-            display: DisplayEntry(
-                id: display.id,
-                name: display.name,
-                selected: display.selected,
-                connection: display.connection,
-                resolution: display.resolution,
-                refreshRate: display.refreshRate,
-                colorSpaceName: display.colorSpaceName,
-                cgColorSpaceName: display.cgColorSpaceName,
-                maximumPotentialEDR: display.maximumPotentialEDR,
-                maximumCurrentEDR: display.maximumCurrentEDR,
-                peakWhite: display.peakWhite,
-                effectivePeakWhite: display.effectivePeakWhite,
-                peakWhiteRange: display.peakWhiteRange,
-                supportsPeakWhiteControl: display.supportsPeakWhiteControl,
-                colorManagementMode: params.mode,
-                supportedColorManagementModes: ColorManagementMode.allCases,
-                colorManagementImplementationStatus: .native,
-                colorManagementScope: .host,
-                displayProfileResolved: true
-            )
-        )
-    }
-
     func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
         OutputColorPresetList(
             displayId: displayId,
@@ -185,6 +148,30 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
         )
     }
 
+    func getOutputColorPreset(_ params: GetOutputColorPresetParams) async throws -> GetOutputColorPresetResult {
+        getOutputColorPresetCalls.append(params)
+        if unknownOutputPresetIds.contains(params.presetId) {
+            throw PSDispatchError(
+                .outputColorPresetUnsupported,
+                data: .object([
+                    "requestedPresetId": .string(params.presetId.rawValue),
+                    "supportedPresetIds": .array([.string(OutputColorPresetID.hdrBT2020PQ.rawValue)]),
+                    "scope": .string(ColorManagementScope.host.rawValue),
+                    "reason": .string("unknownPreset")
+                ])
+            )
+        }
+        return GetOutputColorPresetResult(
+            displayId: params.displayId,
+            catalogRevision: "test-catalog",
+            preset: unsupportedOutputPresetConfig ?? outputPresetConfig(
+                id: params.presetId,
+                supported: true,
+                implementationStatus: .native
+            )
+        )
+    }
+
     func setOutputColorPreset(_ params: SetOutputColorPresetParams) async throws -> SetOutputColorPresetResult {
         setOutputColorPresetCalls.append(params)
         let display = displayList.displays[0]
@@ -196,13 +183,37 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
         )
     }
 
-    private func colorManagementModeEntries(displayProfileResolved: Bool) -> [ColorManagementModeEntry] {
-        [
-            ColorManagementModeEntry(id: .deviceNative, label: "Device Native", layerColorSpace: "displayProfile", inputEncoding: .displayCode, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: displayProfileResolved),
-            ColorManagementModeEntry(id: .managedSRGB, label: "Managed sRGB", layerColorSpace: "sRGB", inputEncoding: .linearLight, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: nil),
-            ColorManagementModeEntry(id: .managedDisplayP3, label: "Managed Display P3", layerColorSpace: "displayP3", inputEncoding: .linearLight, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: nil),
-            ColorManagementModeEntry(id: .managedRec2020, label: "Managed Rec. 2020", layerColorSpace: "rec2020", inputEncoding: .linearLight, implementationStatus: .native, supported: true, requiresPro: true, displayProfileResolved: nil)
-        ]
+    private func outputPresetConfig(
+        id: OutputColorPresetID,
+        supported: Bool,
+        implementationStatus: OutputColorPresetImplementationStatus
+    ) -> OutputColorPresetConfig {
+        OutputColorPresetConfig(
+            id: id,
+            label: "BT.2020 PQ",
+            group: "hdr",
+            family: .hdrReference,
+            gamut: .bt2020,
+            whitePoint: .d65,
+            transfer: .pqSt2084,
+            dynamicRange: .hdr,
+            toneMapping: .none,
+            measurementRange: .full,
+            inputEncoding: .pqSt2084,
+            implementationStatus: implementationStatus,
+            supported: supported,
+            requiresPro: true,
+            unsupportedReason: supported ? nil : "insufficientHeadroom",
+            edrHeadroomRequired: 2.0,
+            edrHeadroomPotential: 1.2,
+            edrHeadroomCurrent: 1.0,
+            edrHeadroomReference: 1.0,
+            referenceWhiteNits: 100,
+            referenceWhiteNitsSource: "configured",
+            peakLuminanceNits: 1000,
+            clipOnsetNits: 120,
+            clipOnsetPQSignal: 0.508
+        )
     }
 }
 
@@ -461,7 +472,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         #expect(result["namespaces"]?.object?["capabilities"]?.array == [.string("list")])
     }
 
-    @Test func displayListColorManagementModesAlwaysSucceedsWithInactiveSource() async throws {
+    @Test func displayListColorManagementModesIsRemoved() async throws {
         let mock = MockDelegate()
         mock.isSourceActive = false
         let d = JSONRPCDispatcher(delegate: mock)
@@ -469,13 +480,10 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(method: "display.listColorManagementModes",
                                             params: #"{"displayId":"69734272"}"#))
         let obj = try responseObject(from: resp)
-        let result = try #require(obj.object?["result"]?.object)
-
-        #expect(result["selectedMode"] == .string("deviceNative"))
-        #expect(result["modes"]?.array?.count == 4)
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
 
-    @Test func displaySetColorManagementModeDoesNotRequireActiveSource() async throws {
+    @Test func displaySetColorManagementModeIsRemoved() async throws {
         let mock = MockDelegate()
         mock.isSourceActive = false
         let d = JSONRPCDispatcher(delegate: mock)
@@ -483,26 +491,15 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(method: "display.setColorManagementMode",
                                             params: #"{"displayId":"69734272","mode":"managedDisplayP3"}"#))
         let obj = try responseObject(from: resp)
-        let result = try #require(obj.object?["result"]?.object)
-
-        #expect(result["scope"] == .string("host"))
-        #expect(mock.setColorManagementModeCalls == [SetColorManagementModeParams(displayId: "69734272", mode: .managedDisplayP3)])
-    }
-
-    @Test func displaySetColorManagementModeRejectsUnknownModeAsInvalidParams() async throws {
-        let mock = MockDelegate()
-        let d = JSONRPCDispatcher(delegate: mock)
-
-        let resp = await d.dispatch(request(method: "display.setColorManagementMode",
-                                            params: #"{"displayId":"69734272","mode":"bt709BT1886"}"#))
-        let obj = try responseObject(from: resp)
-
-        #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
+        #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
 
     @Test func routeManifestIncludesOutputColorPresetRoutes() {
         #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("listOutputColorPresets") == true)
+        #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("getOutputColorPreset") == true)
         #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("setOutputColorPreset") == true)
+        #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("listColorManagementModes") != true)
+        #expect(JSONRPCDispatcher.routeManifest["display"]?.contains("setColorManagementMode") != true)
     }
 
     @Test func displayListOutputColorPresetsDispatchesOpenStringIDs() async throws {
@@ -517,7 +514,81 @@ func responseObject(from data: Data) throws -> JSONValue {
         let result = try #require(obj.object?["result"]?.object)
 
         #expect(result["selectedPresetId"] == .string("hdrBT2020PQ"))
+        #expect(result["catalogRevision"] == .string("test-catalog"))
         #expect(result["presets"]?.array?.first?.object?["id"] == .string("hdrBT2020PQ"))
+        #expect(result["presets"]?.array?.first?.object?["gamut"] == nil)
+    }
+
+    @Test func displayGetOutputColorPresetReturnsFullKnownPresetConfig() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(
+            method: "display.getOutputColorPreset",
+            params: #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
+        ))
+        let obj = try responseObject(from: resp)
+        let result = try #require(obj.object?["result"]?.object)
+        let preset = try #require(result["preset"]?.object)
+
+        #expect(result["displayId"] == .string("69734272"))
+        #expect(result["catalogRevision"] == .string("test-catalog"))
+        #expect(preset["id"] == .string("hdrBT2020PQ"))
+        #expect(preset["gamut"] == .string("bt2020"))
+        #expect(preset["inputEncoding"] == .string("pqSt2084"))
+        #expect(mock.getOutputColorPresetCalls == [GetOutputColorPresetParams(displayId: "69734272", presetId: .hdrBT2020PQ)])
+    }
+
+    @Test func displayGetOutputColorPresetReturnsKnownUnsupportedPresetConfig() async throws {
+        let mock = MockDelegate()
+        mock.unsupportedOutputPresetConfig = OutputColorPresetConfig(
+            id: .hdrBT2020PQ,
+            label: "BT.2020 PQ",
+            group: "hdr",
+            family: .hdrReference,
+            gamut: .bt2020,
+            whitePoint: .d65,
+            transfer: .pqSt2084,
+            dynamicRange: .hdr,
+            toneMapping: .none,
+            measurementRange: .full,
+            inputEncoding: .pqSt2084,
+            implementationStatus: .insufficientHeadroom,
+            supported: false,
+            requiresPro: true,
+            unsupportedReason: "insufficientHeadroom"
+        )
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(
+            method: "display.getOutputColorPreset",
+            params: #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
+        ))
+        let obj = try responseObject(from: resp)
+        let preset = try #require(obj.object?["result"]?.object?["preset"]?.object)
+
+        #expect(preset["id"] == .string("hdrBT2020PQ"))
+        #expect(preset["supported"] == .bool(false))
+        #expect(preset["implementationStatus"] == .string("insufficientHeadroom"))
+        #expect(preset["unsupportedReason"] == .string("insufficientHeadroom"))
+    }
+
+    @Test func displayGetOutputColorPresetRejectsUnknownPresetOnly() async throws {
+        let mock = MockDelegate()
+        mock.unknownOutputPresetIds = [OutputColorPresetID(rawValue: "vendor.unknown")]
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(
+            method: "display.getOutputColorPreset",
+            params: #"{"displayId":"69734272","presetId":"vendor.unknown"}"#
+        ))
+        let obj = try responseObject(from: resp)
+        let error = try #require(obj.object?["error"]?.object)
+        let data = try #require(error["data"]?.object)
+
+        #expect(error["code"] == .int(PSErrorCode.outputColorPresetUnsupported.rawValue))
+        #expect(data["requestedPresetId"] == .string("vendor.unknown"))
+        #expect(data["reason"] == .string("unknownPreset"))
     }
 
     @Test func displaySetOutputColorPresetDispatchesUnknownStringToDelegate() async throws {
@@ -555,12 +626,10 @@ func responseObject(from data: Data) throws -> JSONValue {
             return #"{"background":{"r":0.0,"g":0.0,"b":0.0},"rectangles":[{"color":{"r":1.0,"g":0.0,"b":0.0},"x":0.0,"y":0.0,"width":1.0,"height":1.0}],"bitDepth":10}"#
         case "display.setPeakWhite":
             return #"{"displayId":"69734272","peakWhite":3.0}"#
-        case "display.listColorManagementModes":
-            return #"{"displayId":"69734272"}"#
-        case "display.setColorManagementMode":
-            return #"{"displayId":"69734272","mode":"managedDisplayP3"}"#
         case "display.listOutputColorPresets":
             return #"{"displayId":"69734272"}"#
+        case "display.getOutputColorPreset":
+            return #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
         case "display.setOutputColorPreset":
             return #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
         default:

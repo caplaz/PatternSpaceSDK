@@ -59,17 +59,8 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
     /// Identifier of the currently selected display, if reported.
     public let selectedDisplayId: String?
 
-    /// Host-global color-management mode currently applied to patch output.
-    public let colorManagementMode: ColorManagementMode?
-
-    /// Implementation path for the current color-management mode.
-    public let colorManagementImplementationStatus: ColorManagementImplementationStatus?
-
     /// Whether the active display ICC/profile information could be resolved.
     public let displayProfileResolved: Bool?
-
-    /// Scope affected by color-management writes.
-    public let colorManagementScope: ColorManagementScope?
 
     /// Whether the JSON server requires authentication.
     public let authRequired: Bool?
@@ -123,10 +114,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
             sourceActive: sourceActive,
             selectedSource: nil,
             selectedDisplayId: nil,
-            colorManagementMode: nil,
-            colorManagementImplementationStatus: nil,
             displayProfileResolved: nil,
-            colorManagementScope: nil,
             authRequired: nil,
             connectedClientCount: nil,
             appVersion: nil,
@@ -151,10 +139,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         sourceActive: Bool,
         selectedSource: String?,
         selectedDisplayId: String?,
-        colorManagementMode: ColorManagementMode?,
-        colorManagementImplementationStatus: ColorManagementImplementationStatus?,
         displayProfileResolved: Bool?,
-        colorManagementScope: ColorManagementScope?,
         authRequired: Bool?,
         connectedClientCount: Int?,
         appVersion: String?,
@@ -175,10 +160,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         self.sourceActive = sourceActive
         self.selectedSource = selectedSource
         self.selectedDisplayId = selectedDisplayId
-        self.colorManagementMode = colorManagementMode
-        self.colorManagementImplementationStatus = colorManagementImplementationStatus
         self.displayProfileResolved = displayProfileResolved
-        self.colorManagementScope = colorManagementScope
         self.authRequired = authRequired
         self.connectedClientCount = connectedClientCount
         self.appVersion = appVersion

@@ -49,10 +49,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         case effectivePeakWhite
         case peakWhiteRange
         case supportsPeakWhiteControl
-        case colorManagementMode
-        case supportedColorManagementModes
-        case colorManagementImplementationStatus
-        case colorManagementScope
         case displayProfileResolved
         case outputColorPresetId
         case supportedOutputColorPresetIds
@@ -101,18 +97,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
     /// Whether the app can programmatically adjust peak white for this display.
     public let supportsPeakWhiteControl: Bool
 
-    /// Host-global color-management mode currently applied to patch output.
-    public let colorManagementMode: ColorManagementMode?
-
-    /// Color-management modes this platform can advertise for this display.
-    public let supportedColorManagementModes: [ColorManagementMode]
-
-    /// Implementation path for the current color-management mode.
-    public let colorManagementImplementationStatus: ColorManagementImplementationStatus?
-
-    /// Scope affected by color-management writes.
-    public let colorManagementScope: ColorManagementScope?
-
     /// Whether the display ICC/profile information could be resolved.
     public let displayProfileResolved: Bool?
 
@@ -157,10 +141,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
             effectivePeakWhite: effectivePeakWhite,
             peakWhiteRange: peakWhiteRange,
             supportsPeakWhiteControl: supportsPeakWhiteControl,
-            colorManagementMode: nil,
-            supportedColorManagementModes: [],
-            colorManagementImplementationStatus: nil,
-            colorManagementScope: nil,
             displayProfileResolved: nil,
             outputColorPresetId: nil,
             supportedOutputColorPresetIds: [],
@@ -168,7 +148,7 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         )
     }
 
-    /// Creates a display entry with color-management metadata.
+    /// Creates a display entry with output color preset metadata.
     public init(
         id: String,
         name: String,
@@ -184,10 +164,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         effectivePeakWhite: Double,
         peakWhiteRange: PeakWhiteRange,
         supportsPeakWhiteControl: Bool,
-        colorManagementMode: ColorManagementMode?,
-        supportedColorManagementModes: [ColorManagementMode],
-        colorManagementImplementationStatus: ColorManagementImplementationStatus?,
-        colorManagementScope: ColorManagementScope?,
         displayProfileResolved: Bool?,
         outputColorPresetId: OutputColorPresetID? = nil,
         supportedOutputColorPresetIds: [OutputColorPresetID] = [],
@@ -207,10 +183,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.effectivePeakWhite = effectivePeakWhite
         self.peakWhiteRange = peakWhiteRange
         self.supportsPeakWhiteControl = supportsPeakWhiteControl
-        self.colorManagementMode = colorManagementMode
-        self.supportedColorManagementModes = supportedColorManagementModes
-        self.colorManagementImplementationStatus = colorManagementImplementationStatus
-        self.colorManagementScope = colorManagementScope
         self.displayProfileResolved = displayProfileResolved
         self.outputColorPresetId = outputColorPresetId
         self.supportedOutputColorPresetIds = supportedOutputColorPresetIds
@@ -233,10 +205,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.effectivePeakWhite = try container.decode(Double.self, forKey: .effectivePeakWhite)
         self.peakWhiteRange = try container.decode(PeakWhiteRange.self, forKey: .peakWhiteRange)
         self.supportsPeakWhiteControl = try container.decode(Bool.self, forKey: .supportsPeakWhiteControl)
-        self.colorManagementMode = try container.decodeIfPresent(ColorManagementMode.self, forKey: .colorManagementMode)
-        self.supportedColorManagementModes = try container.decodeIfPresent([ColorManagementMode].self, forKey: .supportedColorManagementModes) ?? []
-        self.colorManagementImplementationStatus = try container.decodeIfPresent(ColorManagementImplementationStatus.self, forKey: .colorManagementImplementationStatus)
-        self.colorManagementScope = try container.decodeIfPresent(ColorManagementScope.self, forKey: .colorManagementScope)
         self.displayProfileResolved = try container.decodeIfPresent(Bool.self, forKey: .displayProfileResolved)
         self.outputColorPresetId = try container.decodeIfPresent(OutputColorPresetID.self, forKey: .outputColorPresetId)
         self.supportedOutputColorPresetIds = try container.decodeIfPresent([OutputColorPresetID].self, forKey: .supportedOutputColorPresetIds) ?? []
@@ -259,10 +227,6 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         try container.encode(effectivePeakWhite, forKey: .effectivePeakWhite)
         try container.encode(peakWhiteRange, forKey: .peakWhiteRange)
         try container.encode(supportsPeakWhiteControl, forKey: .supportsPeakWhiteControl)
-        try container.encodeIfPresent(colorManagementMode, forKey: .colorManagementMode)
-        try container.encode(supportedColorManagementModes, forKey: .supportedColorManagementModes)
-        try container.encodeIfPresent(colorManagementImplementationStatus, forKey: .colorManagementImplementationStatus)
-        try container.encodeIfPresent(colorManagementScope, forKey: .colorManagementScope)
         try container.encodeIfPresent(displayProfileResolved, forKey: .displayProfileResolved)
         try container.encodeIfPresent(outputColorPresetId, forKey: .outputColorPresetId)
         try container.encode(supportedOutputColorPresetIds, forKey: .supportedOutputColorPresetIds)

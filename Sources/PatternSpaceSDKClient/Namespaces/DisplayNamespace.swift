@@ -32,23 +32,7 @@ public final class DisplayNamespace: Sendable {
         return try JSONDecoder().decode(DisplayEntry.self, from: data)
     }
 
-    /// Lists available color-management modes for the specified display.
-    public func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList {
-        struct Params: Encodable { let displayId: String }
-        let result = try await session.send(method: "display.listColorManagementModes", params: Params(displayId: displayId), via: transport)
-        let data = try JSONEncoder().encode(result)
-        return try JSONDecoder().decode(ColorManagementModeList.self, from: data)
-    }
-
-    /// Sets the host-global color-management mode for the selected display.
-    public func setColorManagementMode(displayId: String, mode: ColorManagementMode) async throws -> SetColorManagementModeResult {
-        let params = SetColorManagementModeParams(displayId: displayId, mode: mode)
-        let result = try await session.send(method: "display.setColorManagementMode", params: params, via: transport)
-        let data = try JSONEncoder().encode(result)
-        return try JSONDecoder().decode(SetColorManagementModeResult.self, from: data)
-    }
-
-    /// Lists available output color presets for the specified display.
+    /// Lists lightweight output color preset summaries for the specified display.
     public func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
         struct Params: Encodable { let displayId: String }
         let result = try await session.send(
@@ -58,6 +42,21 @@ public final class DisplayNamespace: Sendable {
         )
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode(OutputColorPresetList.self, from: data)
+    }
+
+    /// Returns the full output color preset config for the specified display.
+    public func getOutputColorPreset(
+        displayId: String,
+        presetId: OutputColorPresetID
+    ) async throws -> GetOutputColorPresetResult {
+        let params = GetOutputColorPresetParams(displayId: displayId, presetId: presetId)
+        let result = try await session.send(
+            method: "display.getOutputColorPreset",
+            params: params,
+            via: transport
+        )
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(GetOutputColorPresetResult.self, from: data)
     }
 
     /// Sets the host-global output color preset for the selected display.

@@ -48,8 +48,8 @@ import Foundation
           "connectedClientCount":1,
           "appVersion":"1.1.0",
           "buildNumber":"123",
-          "sdkVersion":"0.4.1",
-          "protocolVersion":"1.1",
+          "sdkVersion":"0.5.0",
+          "protocolVersion":"1.2",
           "outputColorPresetId":"hdrBT2020PQ",
           "outputColorPresetImplementationStatus":"native",
           "edrHeadroomPotential":4.0,
@@ -66,10 +66,7 @@ import Foundation
         let status = try JSONDecoder().decode(DeviceStatus.self, from: Data(json.utf8))
 
         #expect(status.selectedDisplayId == "69734272")
-        #expect(status.colorManagementMode == .deviceNative)
-        #expect(status.colorManagementImplementationStatus == .native)
         #expect(status.displayProfileResolved == true)
-        #expect(status.colorManagementScope == .host)
         #expect(status.authRequired == true)
         #expect(status.connectedClientCount == 1)
         #expect(status.appVersion == "1.1.0")

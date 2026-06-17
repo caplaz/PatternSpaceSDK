@@ -12,7 +12,7 @@ Bonjour service type:
 _patternspace._tcp
 ```
 
-The server advertises `protocolVersion=1.1` and `authRequired=true|false` in the TXT record.
+The server advertises `protocolVersion=1.2` and `authRequired=true|false` in the TXT record.
 
 ## Authentication
 
@@ -22,11 +22,11 @@ If the server is configured with a token, the HTTP upgrade request must include:
 Authorization: Bearer <token>
 ```
 
-Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients receive `101 Switching Protocols`.
+Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients receive `101 Switching Protocols`. When auth is required, unauthenticated clients are rejected during the WebSocket upgrade before JSON-RPC dispatch. Clients can still discover whether auth is required from the Bonjour TXT record.
 
-When auth is required, unauthenticated clients are rejected during the WebSocket upgrade before JSON-RPC dispatch. Clients can still discover whether auth is required from the Bonjour TXT record.
+## Envelopes
 
-## Request Envelope
+Requests use JSON-RPC 2.0 with a string or integer `id`. Notifications omit `id`.
 
 ```json
 {
@@ -43,36 +43,45 @@ When auth is required, unauthenticated clients are rejected during the WebSocket
 }
 ```
 
-`id` may be a string or integer. Notifications omit `id`.
+Success responses carry `result`; failures carry JSON-RPC errors with PatternSpace-specific codes where appropriate.
 
-## Success Response
+## Capabilities
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": true
-}
-```
+### `capabilities.list`
 
-## Error Response
+Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integrators should call this after connecting to discover the server's supported namespaces.
 
 ```json
 {
   "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32602,
-    "message": "Invalid params"
+  "id": 0,
+  "result": {
+    "protocolVersion": "1.2",
+    "app": { "name": "PatternSpace", "version": "1.2.0", "build": "1" },
+    "sdkVersion": "0.5.0",
+    "platform": "macOS",
+    "authRequired": true,
+    "namespaces": {
+      "capabilities": ["list"],
+      "device": ["info", "status"],
+      "display": ["list", "setPeakWhite", "listOutputColorPresets", "getOutputColorPreset", "setOutputColorPreset"],
+      "pattern": ["display", "displayColor", "displayPatch", "clear", "list", "get"]
+    },
+    "features": {
+      "events": true,
+      "displayInventory": true,
+      "peakWhiteControl": true,
+      "outputColorPresets": true,
+      "measurementRange": false,
+      "catalogPatterns": true,
+      "customICCBuilder": false,
+      "httpBridge": false
+    }
   }
 }
 ```
 
-## Methods
-
-### Patch Color Methods
-
-These methods drive ad hoc calibration patches. They do not require the client to know the app's built-in pattern catalog.
+## Pattern Methods
 
 ### `pattern.displayColor`
 
@@ -89,16 +98,6 @@ Displays an RGB color. By default the color fills the whole screen. When `size` 
 ```
 
 Color channels are normalized `0.0...1.0`. `size` is optional, defaults to `100`, and must be in `(0, 100]`. A `size` of `10` means 10% of total screen area; the centered rectangle side length is `sqrt(size / 100)`.
-
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {}
-}
-```
 
 ### `pattern.displayPatch`
 
@@ -122,16 +121,6 @@ Displays one or more normalized rectangles over one background color. Rectangles
 
 Rectangle coordinates are normalized display-space values. `(0, 0)` is the top-left of the active output and `(1, 1)` is the bottom-right. Each rectangle must fit inside the normalized display space. A patch may contain up to 64 rectangles.
 
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "result": {}
-}
-```
-
 ### `pattern.clear`
 
 Clears the active remote pattern.
@@ -140,23 +129,9 @@ Clears the active remote pattern.
 {}
 ```
 
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 3,
-  "result": {}
-}
-```
-
-### Existing Pattern List Methods
-
-These methods let clients discover and display patterns that PatternSpace already ships in its catalog.
-
 ### `pattern.list`
 
-Lists available patterns, optionally filtered by category and subcategory.
+Lists built-in patterns, optionally filtered by category and subcategory.
 
 ```json
 {
@@ -165,56 +140,19 @@ Lists available patterns, optionally filtered by category and subcategory.
 }
 ```
 
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 4,
-  "result": {
-    "patterns": [
-      {
-        "id": "color/red",
-        "name": "Red",
-        "category": "color",
-        "subcategory": "primary"
-      },
-      {
-        "id": "checks/checkerboard",
-        "name": "Checkerboard",
-        "category": "checks",
-        "subcategory": "layout"
-      }
-    ]
-  }
-}
-```
-
 ### `pattern.display`
 
-Displays a named pattern by id.
+Displays a built-in pattern by id.
 
 ```json
 {
   "patternId": "color/red"
-}
-```
-
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 5,
-  "result": {
-    "patternId": "color/red"
-  }
 }
 ```
 
 ### `pattern.get`
 
-Gets metadata for one pattern.
+Gets metadata for one built-in pattern.
 
 ```json
 {
@@ -222,83 +160,25 @@ Gets metadata for one pattern.
 }
 ```
 
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 6,
-  "result": {
-    "id": "color/red",
-    "name": "Red",
-    "category": "color",
-    "subcategory": "primary"
-  }
-}
-```
+## Device Methods
 
 ### `device.info`
 
 Returns static device information such as name, resolution, color format, bit depth, HDR mode, refresh rate, and output range.
 
-### `capabilities.list`
-
-Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integrators should call this after connecting to discover the server's supported namespaces.
-
-```json
-{}
-```
-
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 0,
-  "result": {
-    "protocolVersion": "1.1",
-    "app": { "name": "PatternSpace", "version": "1.1.0", "build": "1" },
-    "sdkVersion": "0.4.1",
-    "platform": "macOS",
-    "authRequired": true,
-    "namespaces": {
-      "capabilities": ["list"],
-      "device": ["info", "status"],
-      "display": ["list", "setPeakWhite", "listColorManagementModes", "setColorManagementMode", "listOutputColorPresets", "setOutputColorPreset"],
-      "pattern": ["display", "displayColor", "displayPatch", "clear", "list", "get"]
-    },
-    "features": {
-      "events": true,
-      "displayInventory": true,
-      "peakWhiteControl": true,
-      "colorManagementModes": true,
-      "outputColorPresets": true,
-      "measurementRange": false,
-      "catalogPatterns": true,
-      "customICCBuilder": false,
-      "httpBridge": false
-    }
-  }
-}
-```
-
 ### `device.status`
 
-Returns current status, including active pattern id and whether the JSON source is active. Protocol `1.1` adds optional integration metadata such as selected source, selected display, color-management mode/status/scope, profile resolution, auth mode, connected client count, app version/build, SDK version, protocol version, output color preset ID/status, EDR headroom, reference white, and clip-onset diagnostics. Decoders should ignore unknown additive fields.
+Returns runtime state: current pattern id, JSON source activity, selected source/display, profile resolution, auth mode, connected client count, app version/build, SDK version, protocol version, selected output preset, EDR headroom, reference-white, and clip-onset diagnostics. Decoders should ignore unknown additive fields.
 
-### Display Methods
+Protocol `1.2` no longer defines the legacy typed color-management mode fields. Hosts using output presets should report `outputColorPresetId` and `outputColorPresetImplementationStatus`.
 
-These methods expose display inventory, Peak White control, and color-management mode control. They are authenticated when the server requires a token, but they do not require the JSON source to be active.
+## Display Methods
+
+Display methods expose display inventory, Peak White control, and output color preset control. They are authenticated when the server requires a token, but they do not require the JSON source to be active.
 
 ### `display.list`
 
 Returns display inventory and selected display metadata.
-
-```json
-{}
-```
-
-Sample response:
 
 ```json
 {
@@ -321,15 +201,8 @@ Sample response:
         "maximumCurrentEDR": 2.0,
         "peakWhite": 4.0,
         "effectivePeakWhite": 2.0,
-        "peakWhiteRange": {
-          "minimum": 0.25,
-          "maximum": 4.0
-        },
+        "peakWhiteRange": { "minimum": 0.25, "maximum": 4.0 },
         "supportsPeakWhiteControl": true,
-        "colorManagementMode": "deviceNative",
-        "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
-        "colorManagementImplementationStatus": "native",
-        "colorManagementScope": "host",
         "displayProfileResolved": true,
         "outputColorPresetId": "deviceNative",
         "supportedOutputColorPresetIds": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020", "hdrP3D65PQ", "hdrBT2020PQ"],
@@ -340,13 +213,9 @@ Sample response:
 }
 ```
 
-`platform` is `macOS` or `iOS`. `connection` is `builtIn`, `wired`, `airPlay`, or `unknown`; `unknown` is reserved for defensive fallback when a host cannot classify a display. On iOS, external outputs report `wired` for USB/HDMI-style connections or `airPlay` for AirPlay routes.
+`platform` is `macOS` or `iOS`. `connection` is `builtIn`, `wired`, `airPlay`, or `unknown`. `peakWhite` is the stored EDR-relative Peak White value. `effectivePeakWhite` is the value currently in use after non-destructive clamping to the display's current capability.
 
-`peakWhite` is the stored EDR-relative Peak White value. `effectivePeakWhite` is the value currently in use after non-destructive clamping to the display's current capability, so it can be lower than `peakWhite`.
-
-Color-management fields are additive. On macOS, `colorManagementMode` is host-global, so every display entry reports the same mode and `colorManagementScope: "host"`. Per-entry fields such as `displayProfileResolved` are computed for that display. On platforms without writable color-management support, hosts may report `colorManagementMode: null`, `supportedColorManagementModes: []`, and `colorManagementImplementationStatus: "unsupported"`.
-
-Output color preset fields are also additive. Preset IDs are open strings. Clients should discover `supportedOutputColorPresetIds` or call `display.listOutputColorPresets` instead of assuming a closed enum. When an HDR preset is active and there is no legacy `ColorManagementMode` equivalent, hosts should report legacy `colorManagementMode`, `colorManagementImplementationStatus`, and `colorManagementScope` as `null` or omit them.
+Preset IDs are open strings. `supportedOutputColorPresetIds` is a quick display-entry summary; clients that need labels, groups, support reasons, or color-science details should call the preset catalog methods below.
 
 ### `display.setPeakWhite`
 
@@ -359,40 +228,7 @@ Sets Peak White for one display and returns the updated display entry directly.
 }
 ```
 
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 8,
-  "result": {
-    "id": "69734272",
-    "name": "Studio Display",
-    "selected": true,
-    "connection": "wired",
-    "resolution": { "width": 5120, "height": 2880 },
-    "refreshRate": 60,
-    "colorSpaceName": "Display P3",
-    "cgColorSpaceName": "kCGColorSpaceDisplayP3",
-    "maximumPotentialEDR": 4.0,
-    "maximumCurrentEDR": 2.0,
-    "peakWhite": 3.0,
-    "effectivePeakWhite": 2.0,
-    "peakWhiteRange": {
-      "minimum": 0.25,
-      "maximum": 4.0
-    },
-    "supportsPeakWhiteControl": true,
-    "colorManagementMode": "deviceNative",
-    "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
-    "colorManagementImplementationStatus": "native",
-    "colorManagementScope": "host",
-    "displayProfileResolved": true
-  }
-}
-```
-
-`peakWhite` must be a finite number in the returned display's accepted `peakWhiteRange`. Out-of-range writes return `peakWhiteOutOfRange` with the rejected value and accepted bounds:
+`peakWhite` must be a finite number in the returned display's accepted `peakWhiteRange`. Out-of-range writes return `peakWhiteOutOfRange` with the rejected value and accepted bounds.
 
 ```json
 {
@@ -413,102 +249,21 @@ Sample response:
 
 Other display errors include `displayNotFound` (`-32007`) and `notAuthorized` (`-32009`).
 
-### `display.listColorManagementModes`
+### Output Color Preset Catalog
 
-Returns the advertised color-management modes for a display and the selected host-global mode.
+Output presets replace the old closed color-management mode API. The SDK defines convenience constants for known preset IDs, but IDs and metadata vocabularies are open strings. Adding a host preset should not require an SDK update.
 
-```json
-{
-  "displayId": "69734272"
-}
-```
-
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 9,
-  "result": {
-    "displayId": "69734272",
-    "selectedMode": "deviceNative",
-    "scope": "host",
-    "modes": [
-      {
-        "id": "deviceNative",
-        "label": "Device Native",
-        "layerColorSpace": "displayProfile",
-        "inputEncoding": "displayCode",
-        "implementationStatus": "native",
-        "supported": true,
-        "requiresPro": true,
-        "displayProfileResolved": true
-      }
-    ]
-  }
-}
-```
-
-Mode ids are `deviceNative`, `managedSRGB`, `managedDisplayP3`, and `managedRec2020`. `requiresPro` is per-mode for forward compatibility even if a host currently gates all modes together.
-
-### `display.setColorManagementMode`
-
-Sets the host-global color-management mode and returns the selected display that actually changed.
-
-```json
-{
-  "displayId": "69734272",
-  "mode": "managedDisplayP3"
-}
-```
-
-Sample response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 10,
-  "result": {
-    "scope": "host",
-    "selectedDisplayId": "69734272",
-    "display": {
-      "id": "69734272",
-      "name": "Studio Display",
-      "selected": true,
-      "connection": "wired",
-      "resolution": { "width": 5120, "height": 2880 },
-      "refreshRate": 60,
-      "colorSpaceName": "Display P3",
-      "cgColorSpaceName": "kCGColorSpaceDisplayP3",
-      "maximumPotentialEDR": 4.0,
-      "maximumCurrentEDR": 2.0,
-      "peakWhite": 3.0,
-      "effectivePeakWhite": 2.0,
-      "peakWhiteRange": { "minimum": 0.25, "maximum": 4.0 },
-      "supportsPeakWhiteControl": true,
-      "colorManagementMode": "managedDisplayP3",
-      "supportedColorManagementModes": ["deviceNative", "managedSRGB", "managedDisplayP3", "managedRec2020"],
-      "colorManagementImplementationStatus": "native",
-      "colorManagementScope": "host",
-      "displayProfileResolved": true
-    }
-  }
-}
-```
-
-Unknown mode strings return JSON-RPC `invalidParams` (`-32602`). Known but unsupported modes return `colorManagementModeUnsupported` (`-32010`) with `requestedMode`, `supportedModes`, and `scope` in error data. If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`) with `requestedDisplayId`, `selectedDisplayId`, and `scope`.
+`catalogRevision` is an opaque cache token sourced from the host catalog. It is identical across `display.listOutputColorPresets` and `display.getOutputColorPreset` while the catalog is unchanged, and it changes whenever the preset set, summary metadata, or full config for any preset changes. Clients may cache full configs by `(presetId, catalogRevision)`.
 
 ### `display.listOutputColorPresets`
 
-Returns the server-advertised output color presets for a display. Preset IDs and status vocabularies are open strings for forward compatibility.
+Returns lightweight preset summaries for UI/discovery.
 
 ```json
 {
   "displayId": "69734272"
 }
 ```
-
-Sample response:
 
 ```json
 {
@@ -518,38 +273,73 @@ Sample response:
     "displayId": "69734272",
     "selectedPresetId": "hdrBT2020PQ",
     "scope": "host",
+    "catalogRevision": "2026-06-16.1",
     "presets": [
       {
         "id": "hdrBT2020PQ",
         "label": "BT.2020 PQ",
         "group": "hdr",
-        "dynamicRange": "hdr",
-        "gamut": "bt2020",
-        "whitePoint": "d65",
-        "transferFunction": "pqSt2084",
-        "measurementRange": "full",
-        "toneMapping": "none",
+        "family": "hdrReference",
         "implementationStatus": "native",
         "supported": true,
-        "requiresPro": true,
-        "layerColorSpace": "extendedLinearITUR_2020",
-        "inputEncoding": "pqSt2084",
-        "edrHeadroomRequired": 2.0,
-        "edrHeadroomPotential": 4.0,
-        "edrHeadroomCurrent": 2.0,
-        "edrHeadroomReference": 1.0,
-        "referenceWhiteNits": 100.0,
-        "referenceWhiteNitsSource": "defaultCalibration100",
-        "peakLuminanceNits": 200.0,
-        "clipOnsetNits": 200.0,
-        "clipOnsetPQSignal": 0.579
+        "requiresPro": true
       }
     ]
   }
 }
 ```
 
-`requiresPro` is discovery metadata. If a preset is supported by the display but the client is not authorized to use it, writes fail with `notAuthorized` (`-32009`).
+The list result intentionally omits full config fields such as gamut, transfer, EDR diagnostics, and input encoding. Call `display.getOutputColorPreset` for those.
+
+### `display.getOutputColorPreset`
+
+Returns the full self-describing config for a known preset.
+
+```json
+{
+  "displayId": "69734272",
+  "presetId": "hdrBT2020PQ"
+}
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "displayId": "69734272",
+    "catalogRevision": "2026-06-16.1",
+    "preset": {
+      "id": "hdrBT2020PQ",
+      "label": "BT.2020 PQ",
+      "group": "hdr",
+      "family": "hdrReference",
+      "gamut": "bt2020",
+      "whitePoint": "d65",
+      "transfer": "pqSt2084",
+      "dynamicRange": "hdr",
+      "toneMapping": "none",
+      "measurementRange": "full",
+      "inputEncoding": "pqSt2084",
+      "implementationStatus": "native",
+      "supported": true,
+      "requiresPro": true,
+      "layerColorSpace": "extendedLinearITUR_2020",
+      "edrHeadroomRequired": 2.0,
+      "edrHeadroomPotential": 4.0,
+      "edrHeadroomCurrent": 2.0,
+      "edrHeadroomReference": 1.0,
+      "referenceWhiteNits": 100.0,
+      "referenceWhiteNitsSource": "defaultCalibration100",
+      "peakLuminanceNits": 200.0,
+      "clipOnsetNits": 200.0,
+      "clipOnsetPQSignal": 0.579
+    }
+  }
+}
+```
+
+Hosts must return the config for any known preset, even when the current display cannot use it. In that case the preset config reports `supported: false`, an implementation status such as `insufficientHeadroom`, and an optional `unsupportedReason`. Throw `outputColorPresetUnsupported` only for genuinely unknown preset IDs.
 
 ### `display.setOutputColorPreset`
 
@@ -562,12 +352,10 @@ Sets the host-global output color preset and returns the selected display that a
 }
 ```
 
-Sample response:
-
 ```json
 {
   "jsonrpc": "2.0",
-  "id": 12,
+  "id": 13,
   "result": {
     "scope": "host",
     "selectedPresetId": "hdrBT2020PQ",
@@ -592,15 +380,13 @@ Sample response:
 }
 ```
 
-Unknown or unavailable preset IDs return `outputColorPresetUnsupported` (`-32012`) with `requestedPresetId`, `supportedPresetIds`, `scope`, and `reason` in error data. Known reasons include `unknownPreset`, `insufficientEDRHeadroom`, and `unsupportedPlatform`. If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`).
+Unknown preset IDs return `outputColorPresetUnsupported` (`-32012`) with `requestedPresetId`, `supportedPresetIds`, `scope`, and `reason` in error data. Known-but-unsupported presets are discoverable via `getOutputColorPreset`; writes to them also fail with `outputColorPresetUnsupported`. Pro entitlement failures use `notAuthorized` (`-32009`). If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`).
 
 ## Notifications
 
 ### `connectionReady`
 
-Sent after a successful WebSocket upgrade.
-
-The server accepts one client at a time. A new successful WebSocket upgrade drops any existing client before `connectionReady` is sent to the new client.
+Sent after a successful WebSocket upgrade. The server accepts one client at a time. A new successful WebSocket upgrade drops any existing client before `connectionReady` is sent to the new client.
 
 ### `pattern.changed`
 
@@ -612,7 +398,7 @@ Sent when device state changes.
 
 ### `display.changed`
 
-Sent when display inventory, selected display, Peak White values, or color-management fields change. The payload has the same shape as a `display.list` result.
+Sent when display inventory, selected display, Peak White values, or output preset fields change. The payload has the same shape as a `display.list` result.
 
 ```json
 {

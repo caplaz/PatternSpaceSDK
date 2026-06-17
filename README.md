@@ -2,7 +2,7 @@
 
 WebSocket JSON-RPC SDK for PatternSpace integration.
 
-PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying capabilities, inspecting richer device/display state, adjusting Peak White, color-management modes, output color presets, and receiving live status events.
+PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying capabilities, inspecting richer device/display state, adjusting Peak White, discovering output color presets, and receiving live status events.
 
 ## Features
 
@@ -21,7 +21,7 @@ PatternSpaceSDK gives calibration tools and automation clients a typed Swift int
 - Swift 5.9+
 - macOS 12+
 - iOS 15+
-- PatternSpace JSON protocol `1.1`
+- PatternSpace JSON protocol `1.2`
 
 ## Installation
 
@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.4.1")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.5.0")
     ],
     targets: [
         .executableTarget(
@@ -96,13 +96,12 @@ try await client.pattern.displayPatch(
 let displays = try await client.display.list()
 if let selected = displays.displays.first(where: \.selected) {
     _ = try await client.display.setPeakWhite(displayId: selected.id, peakWhite: 3.0)
-    let modes = try await client.display.listColorManagementModes(displayId: selected.id)
-    if modes.modes.contains(where: { $0.id == .managedDisplayP3 && $0.supported }) {
-        _ = try await client.display.setColorManagementMode(displayId: selected.id, mode: .managedDisplayP3)
-    }
     let presets = try await client.display.listOutputColorPresets(displayId: selected.id)
-    if presets.presets.contains(where: { $0.id == .hdrBT2020PQ && $0.supported }) {
-        _ = try await client.display.setOutputColorPreset(displayId: selected.id, presetId: .hdrBT2020PQ)
+    if let hdr = presets.presets.first(where: { $0.id == .hdrBT2020PQ }) {
+        let config = try await client.display.getOutputColorPreset(displayId: selected.id, presetId: hdr.id)
+        if config.preset.supported {
+            _ = try await client.display.setOutputColorPreset(displayId: selected.id, presetId: hdr.id)
+        }
     }
 }
 try await client.pattern.clear()
@@ -158,10 +157,7 @@ final class Delegate: PatternSpaceServerDelegate {
             sourceActive: true,
             selectedSource: "PatternSpace JSON",
             selectedDisplayId: "main",
-            colorManagementMode: .deviceNative,
-            colorManagementImplementationStatus: .native,
             displayProfileResolved: true,
-            colorManagementScope: .host,
             authRequired: true,
             connectedClientCount: 1,
             appVersion: "1.1.0",
@@ -183,7 +179,6 @@ final class Delegate: PatternSpaceServerDelegate {
                 events: true,
                 displayInventory: true,
                 peakWhiteControl: true,
-                colorManagementModes: true,
                 outputColorPresets: true,
                 measurementRange: false,
                 catalogPatterns: true,
@@ -213,11 +208,10 @@ final class Delegate: PatternSpaceServerDelegate {
                     effectivePeakWhite: 2.0,
                     peakWhiteRange: PeakWhiteRange(maximum: 4.0),
                     supportsPeakWhiteControl: true,
-                    colorManagementMode: .deviceNative,
-                    supportedColorManagementModes: ColorManagementMode.allCases,
-                    colorManagementImplementationStatus: .native,
-                    colorManagementScope: .host,
-                    displayProfileResolved: true
+                    displayProfileResolved: true,
+                    outputColorPresetId: .deviceNative,
+                    supportedOutputColorPresetIds: [.deviceNative, .managedSRGB, .managedDisplayP3, .managedRec2020],
+                    outputColorPresetImplementationStatus: "native"
                 )
             ]
         )
@@ -253,73 +247,69 @@ final class Delegate: PatternSpaceServerDelegate {
             effectivePeakWhite: min(params.peakWhite, 2.0),
             peakWhiteRange: PeakWhiteRange(maximum: 4.0),
             supportsPeakWhiteControl: true,
-            colorManagementMode: .deviceNative,
-            supportedColorManagementModes: ColorManagementMode.allCases,
-            colorManagementImplementationStatus: .native,
-            colorManagementScope: .host,
-            displayProfileResolved: true
+            displayProfileResolved: true,
+            outputColorPresetId: .deviceNative,
+            supportedOutputColorPresetIds: [.deviceNative, .managedSRGB, .managedDisplayP3, .managedRec2020],
+            outputColorPresetImplementationStatus: "native"
         )
     }
 
-    func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList {
+    func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
         guard displayId == "main" else {
             throw PSDispatchError(.displayNotFound, data: .object(["displayId": .string(displayId)]))
         }
-        return ColorManagementModeList(
+        return OutputColorPresetList(
             displayId: displayId,
-            selectedMode: .deviceNative,
+            selectedPresetId: .deviceNative,
             scope: .host,
-            modes: [
-                ColorManagementModeEntry(
+            catalogRevision: "2026-06-16.1",
+            presets: [
+                OutputColorPresetSummary(
                     id: .deviceNative,
                     label: "Device Native",
-                    layerColorSpace: "displayProfile",
-                    inputEncoding: .displayCode,
-                    implementationStatus: .native,
+                    group: "device",
+                    family: .device,
                     supported: true,
-                    requiresPro: true,
-                    displayProfileResolved: true
+                    requiresPro: false,
+                    implementationStatus: .native
                 ),
-                ColorManagementModeEntry(
+                OutputColorPresetSummary(
                     id: .managedDisplayP3,
                     label: "Managed Display P3",
-                    layerColorSpace: "displayP3",
-                    inputEncoding: .linearLight,
-                    implementationStatus: .native,
+                    group: "managed",
+                    family: .sdrReference,
                     supported: true,
                     requiresPro: true,
-                    displayProfileResolved: nil
+                    implementationStatus: .native
                 )
             ]
         )
     }
 
-    func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult {
+    func getOutputColorPreset(_ params: GetOutputColorPresetParams) async throws -> GetOutputColorPresetResult {
         guard params.displayId == "main" else {
             throw PSDispatchError(.displayNotFound, data: .object(["displayId": .string(params.displayId)]))
         }
-        let display = DisplayEntry(
-            id: "main",
-            name: "Main Display",
-            selected: true,
-            connection: .builtIn,
-            resolution: Resolution(width: 3840, height: 2160),
-            refreshRate: 60,
-            colorSpaceName: "Display P3",
-            cgColorSpaceName: "kCGColorSpaceDisplayP3",
-            maximumPotentialEDR: 4.0,
-            maximumCurrentEDR: 2.0,
-            peakWhite: 2.0,
-            effectivePeakWhite: 2.0,
-            peakWhiteRange: PeakWhiteRange(maximum: 4.0),
-            supportsPeakWhiteControl: true,
-            colorManagementMode: params.mode,
-            supportedColorManagementModes: ColorManagementMode.allCases,
-            colorManagementImplementationStatus: .native,
-            colorManagementScope: .host,
-            displayProfileResolved: true
+        return GetOutputColorPresetResult(
+            displayId: params.displayId,
+            catalogRevision: "2026-06-16.1",
+            preset: OutputColorPresetConfig(
+                id: params.presetId,
+                label: "Device Native",
+                group: "device",
+                family: .device,
+                gamut: .displayNative,
+                whitePoint: .displayNative,
+                transfer: .displayNative,
+                dynamicRange: .sdr,
+                toneMapping: .none,
+                measurementRange: .full,
+                inputEncoding: .displayCode,
+                implementationStatus: .native,
+                supported: true,
+                requiresPro: false
+            )
         )
-        return SetColorManagementModeResult(scope: .host, selectedDisplayId: params.displayId, display: display)
     }
 
     var isSourceActive: Bool { true }
@@ -398,9 +388,8 @@ Display methods:
 
 - `display.list`
 - `display.setPeakWhite`
-- `display.listColorManagementModes`
-- `display.setColorManagementMode`
 - `display.listOutputColorPresets`
+- `display.getOutputColorPreset`
 - `display.setOutputColorPreset`
 
 Notifications:

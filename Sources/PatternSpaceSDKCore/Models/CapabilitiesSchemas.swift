@@ -18,7 +18,6 @@ public struct CapabilityFeatures: Codable, Sendable, Equatable {
     public let events: Bool
     public let displayInventory: Bool
     public let peakWhiteControl: Bool
-    public let colorManagementModes: Bool
     public let outputColorPresets: Bool
     public let measurementRange: Bool
     public let catalogPatterns: Bool
@@ -29,8 +28,7 @@ public struct CapabilityFeatures: Codable, Sendable, Equatable {
         events: Bool,
         displayInventory: Bool,
         peakWhiteControl: Bool,
-        colorManagementModes: Bool,
-        outputColorPresets: Bool = false,
+        outputColorPresets: Bool,
         measurementRange: Bool,
         catalogPatterns: Bool,
         customICCBuilder: Bool,
@@ -39,7 +37,6 @@ public struct CapabilityFeatures: Codable, Sendable, Equatable {
         self.events = events
         self.displayInventory = displayInventory
         self.peakWhiteControl = peakWhiteControl
-        self.colorManagementModes = colorManagementModes
         self.outputColorPresets = outputColorPresets
         self.measurementRange = measurementRange
         self.catalogPatterns = catalogPatterns

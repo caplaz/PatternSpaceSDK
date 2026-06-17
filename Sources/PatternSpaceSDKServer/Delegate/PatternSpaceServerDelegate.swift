@@ -47,16 +47,15 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Display configuration writes do not require the JSON source to be active.
     func setPeakWhite(_ params: SetPeakWhiteParams) async throws -> DisplayEntry
 
-    /// Lists available color-management modes for a display.
-    func listColorManagementModes(displayId: String) async throws -> ColorManagementModeList
-
-    /// Sets the host-global color-management mode when the display matches selected output.
-    ///
-    /// Display configuration writes do not require the JSON source to be active.
-    func setColorManagementMode(_ params: SetColorManagementModeParams) async throws -> SetColorManagementModeResult
-
-    /// Lists output color presets for a display.
+    /// Lists lightweight output color preset summaries for a display.
     func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList
+
+    /// Returns the full config for a known output color preset.
+    ///
+    /// Hosts should return the config for known presets even when the current
+    /// display does not support them (`preset.supported == false`). Throw
+    /// `outputColorPresetUnsupported` only for genuinely unknown IDs.
+    func getOutputColorPreset(_ params: GetOutputColorPresetParams) async throws -> GetOutputColorPresetResult
 
     /// Sets the host-global output color preset when the display matches selected output.
     ///
@@ -72,7 +71,25 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
 
 public extension PatternSpaceServerDelegate {
     func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
-        OutputColorPresetList(displayId: displayId, selectedPresetId: nil, scope: .host, presets: [])
+        OutputColorPresetList(
+            displayId: displayId,
+            selectedPresetId: nil,
+            scope: .host,
+            catalogRevision: "unsupported",
+            presets: []
+        )
+    }
+
+    func getOutputColorPreset(_ params: GetOutputColorPresetParams) async throws -> GetOutputColorPresetResult {
+        throw PSDispatchError(
+            .outputColorPresetUnsupported,
+            data: .object([
+                "requestedPresetId": .string(params.presetId.rawValue),
+                "supportedPresetIds": .array([]),
+                "scope": .string(ColorManagementScope.host.rawValue),
+                "reason": .string("unknownPreset")
+            ])
+        )
     }
 
     func setOutputColorPreset(_ params: SetOutputColorPresetParams) async throws -> SetOutputColorPresetResult {

@@ -33,7 +33,7 @@ import Testing
         #expect(entry.peakWhiteRange.maximum == 4.0)
     }
 
-    @Test func displayEntryDecodesColorManagementFieldsAndIgnoresUnknownKeys() throws {
+    @Test func displayEntryIgnoresLegacyColorManagementFieldsAndUnknownKeys() throws {
         let json = """
         {
           "id":"69734272",
@@ -61,10 +61,6 @@ import Testing
 
         let entry = try JSONDecoder().decode(DisplayEntry.self, from: Data(json.utf8))
 
-        #expect(entry.colorManagementMode == .deviceNative)
-        #expect(entry.supportedColorManagementModes == [.deviceNative, .managedSRGB, .managedDisplayP3, .managedRec2020])
-        #expect(entry.colorManagementImplementationStatus == .native)
-        #expect(entry.colorManagementScope == .host)
         #expect(entry.displayProfileResolved == true)
     }
 
@@ -302,7 +298,7 @@ import Testing
         #expect(preset.clipOnsetPQSignal == 0.579)
     }
 
-    @Test func displayEntryDecodesOutputPresetFieldsAndNilLegacyHDRFields() throws {
+    @Test func displayEntryDecodesOutputPresetFieldsAndIgnoresLegacyModeFields() throws {
         let json = """
         {
           "id":"69734272",
@@ -325,9 +321,6 @@ import Testing
 
         let entry = try JSONDecoder().decode(DisplayEntry.self, from: Data(json.utf8))
 
-        #expect(entry.colorManagementMode == nil)
-        #expect(entry.colorManagementImplementationStatus == nil)
-        #expect(entry.colorManagementScope == nil)
         #expect(entry.outputColorPresetId == .hdrBT2020PQ)
         #expect(entry.supportedOutputColorPresetIds.contains(.deviceNative))
         #expect(entry.outputColorPresetImplementationStatus == "native")
@@ -368,7 +361,6 @@ import Testing
         #expect(PSErrorCode.displayNotFound.rawValue == -32007)
         #expect(PSErrorCode.peakWhiteOutOfRange.rawValue == -32008)
         #expect(PSErrorCode.notAuthorized.rawValue == -32009)
-        #expect(PSErrorCode.colorManagementModeUnsupported.rawValue == -32010)
         #expect(PSErrorCode.displaySelectionMismatch.rawValue == -32011)
         #expect(PSErrorCode.outputColorPresetUnsupported.rawValue == -32012)
     }
