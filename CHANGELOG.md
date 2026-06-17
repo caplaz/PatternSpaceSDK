@@ -4,6 +4,15 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.5.1] - 2026-06-17
+
+### Added
+- Convenience preset ID constants for `sdrReferenceP3D65Gamma22` and `sdrReferenceP3D65Gamma26`
+- Open-string convenience constants for `OutputColorPresetTransfer.proPhotoROMM` and `OutputColorPresetInputEncoding.proPhotoROMM`
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.5.1`; PatternSpace JSON protocol remains `1.2`
+
 ## [0.5.0] - 2026-06-17
 
 ### Added

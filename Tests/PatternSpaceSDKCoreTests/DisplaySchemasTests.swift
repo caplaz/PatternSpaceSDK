@@ -74,6 +74,13 @@ import Testing
         #expect(String(data: encoded, encoding: .utf8) == #""vendor.customPQ""#)
     }
 
+    @Test func outputPresetVocabularyIncludesPlanBSdrConstants() {
+        #expect(OutputColorPresetID.sdrReferenceP3D65Gamma22.rawValue == "sdrReferenceP3D65Gamma22")
+        #expect(OutputColorPresetID.sdrReferenceP3D65Gamma26.rawValue == "sdrReferenceP3D65Gamma26")
+        #expect(OutputColorPresetTransfer.proPhotoROMM.rawValue == "proPhotoROMM")
+        #expect(OutputColorPresetInputEncoding.proPhotoROMM.rawValue == "proPhotoROMM")
+    }
+
     @Test func outputPresetListUsesLightweightSummariesAndCatalogRevision() throws {
         let result = OutputColorPresetList(
             displayId: "69734272",

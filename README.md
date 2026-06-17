@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.5.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.5.1")
     ],
     targets: [
         .executableTarget(

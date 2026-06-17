@@ -58,7 +58,7 @@ Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integra
   "result": {
     "protocolVersion": "1.2",
     "app": { "name": "PatternSpace", "version": "1.2.0", "build": "1" },
-    "sdkVersion": "0.5.0",
+    "sdkVersion": "0.5.1",
     "platform": "macOS",
     "authRequired": true,
     "namespaces": {
@@ -251,7 +251,7 @@ Other display errors include `displayNotFound` (`-32007`) and `notAuthorized` (`
 
 ### Output Color Preset Catalog
 
-Output presets replace the old closed color-management mode API. The SDK defines convenience constants for known preset IDs, but IDs and metadata vocabularies are open strings. Adding a host preset should not require an SDK update.
+Output presets replace the old closed color-management mode API. The SDK defines convenience constants for known preset IDs, but IDs and metadata vocabularies are open strings. Adding a host preset should not require an SDK update. SDK `0.5.1` includes convenience constants for the Phase 3 SDR reference vocabulary, including P3-D65 gamma 2.2/2.4/2.6 and the open-string `proPhotoROMM` transfer/input encoding token.
 
 `catalogRevision` is an opaque cache token sourced from the host catalog. It is identical across `display.listOutputColorPresets` and `display.getOutputColorPreset` while the catalog is unchanged, and it changes whenever the preset set, summary metadata, or full config for any preset changes. Clients may cache full configs by `(presetId, catalogRevision)`.
 

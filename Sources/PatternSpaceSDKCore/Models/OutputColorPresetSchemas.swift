@@ -47,7 +47,9 @@ public extension OutputColorPresetID {
     static let sdrReferenceBT2020Gamma24 = Self(rawValue: "sdrReferenceBT2020Gamma24")
     static let sdrReferenceBT2020BT1886 = Self(rawValue: "sdrReferenceBT2020BT1886")
     static let sdrReferenceP3DCIGamma26 = Self(rawValue: "sdrReferenceP3DCIGamma26")
+    static let sdrReferenceP3D65Gamma22 = Self(rawValue: "sdrReferenceP3D65Gamma22")
     static let sdrReferenceP3D65Gamma24 = Self(rawValue: "sdrReferenceP3D65Gamma24")
+    static let sdrReferenceP3D65Gamma26 = Self(rawValue: "sdrReferenceP3D65Gamma26")
 }
 
 /// Common behavior for typed open-string preset metadata values.
@@ -147,6 +149,7 @@ public extension OutputColorPresetTransfer {
     static let gamma26 = Self(rawValue: "gamma2.6")
     static let bt1886 = Self(rawValue: "bt1886")
     static let pqSt2084 = Self(rawValue: "pqSt2084")
+    static let proPhotoROMM = Self(rawValue: "proPhotoROMM")
 }
 
 public struct OutputColorPresetInputEncoding: OutputColorPresetOpenStringValue {
@@ -166,6 +169,7 @@ public extension OutputColorPresetInputEncoding {
     static let gamma26 = Self(rawValue: "gamma2.6")
     static let bt1886 = Self(rawValue: "bt1886")
     static let pqSt2084 = Self(rawValue: "pqSt2084")
+    static let proPhotoROMM = Self(rawValue: "proPhotoROMM")
 }
 
 public struct OutputColorPresetDynamicRange: OutputColorPresetOpenStringValue {
