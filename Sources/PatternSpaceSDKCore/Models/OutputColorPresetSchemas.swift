@@ -33,6 +33,9 @@ public extension OutputColorPresetID {
     static let managedRec2020 = Self(rawValue: "managedRec2020")
     static let hdrP3D65PQ = Self(rawValue: "hdrP3D65PQ")
     static let hdrBT2020PQ = Self(rawValue: "hdrBT2020PQ")
+    static let extLinearSRGBHDR = Self(rawValue: "extLinearSRGBHDR")
+    static let linearHDRP3D65 = Self(rawValue: "linearHDRP3D65")
+    static let linearHDRBT2020 = Self(rawValue: "linearHDRBT2020")
 
     static let sdrReferenceSRGB = Self(rawValue: "sdrReferenceSRGB")
     static let sdrReferenceAdobeRGB1998 = Self(rawValue: "sdrReferenceAdobeRGB1998")
@@ -90,6 +93,7 @@ public extension OutputColorPresetFamily {
     static let device = Self(rawValue: "device")
     static let sdrReference = Self(rawValue: "sdrReference")
     static let hdrReference = Self(rawValue: "hdrReference")
+    static let linearHDR = Self(rawValue: "linearHDR")
 }
 
 public struct OutputColorPresetGamut: OutputColorPresetOpenStringValue {
