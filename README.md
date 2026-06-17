@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.5.1")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.6.0")
     ],
     targets: [
         .executableTarget(
@@ -207,10 +207,10 @@ final class Delegate: PatternSpaceServerDelegate {
                     peakWhite: 2.0,
                     effectivePeakWhite: 2.0,
                     peakWhiteRange: PeakWhiteRange(maximum: 4.0),
-                    supportsPeakWhiteControl: true,
+                    supportsPeakWhiteControl: false,
                     displayProfileResolved: true,
                     outputColorPresetId: .deviceNative,
-                    supportedOutputColorPresetIds: [.deviceNative, .managedSRGB, .managedDisplayP3, .managedRec2020],
+                    supportedOutputColorPresetIds: [.deviceNative, .sdrReferenceSRGB, .hdrP3D65PQ, .extLinearSRGBHDR],
                     outputColorPresetImplementationStatus: "native"
                 )
             ]
@@ -246,10 +246,10 @@ final class Delegate: PatternSpaceServerDelegate {
             peakWhite: params.peakWhite,
             effectivePeakWhite: min(params.peakWhite, 2.0),
             peakWhiteRange: PeakWhiteRange(maximum: 4.0),
-            supportsPeakWhiteControl: true,
+            supportsPeakWhiteControl: false,
             displayProfileResolved: true,
             outputColorPresetId: .deviceNative,
-            supportedOutputColorPresetIds: [.deviceNative, .managedSRGB, .managedDisplayP3, .managedRec2020],
+            supportedOutputColorPresetIds: [.deviceNative, .sdrReferenceSRGB, .hdrP3D65PQ, .extLinearSRGBHDR],
             outputColorPresetImplementationStatus: "native"
         )
     }
@@ -262,7 +262,7 @@ final class Delegate: PatternSpaceServerDelegate {
             displayId: displayId,
             selectedPresetId: .deviceNative,
             scope: .host,
-            catalogRevision: "2026-06-16.1",
+            catalogRevision: "2026-06-17.1",
             presets: [
                 OutputColorPresetSummary(
                     id: .deviceNative,
@@ -274,10 +274,10 @@ final class Delegate: PatternSpaceServerDelegate {
                     implementationStatus: .native
                 ),
                 OutputColorPresetSummary(
-                    id: .managedDisplayP3,
-                    label: "Managed Display P3",
-                    group: "managed",
-                    family: .sdrReference,
+                    id: .extLinearSRGBHDR,
+                    label: "Extended Linear sRGB HDR",
+                    group: "linearHDR",
+                    family: .linearHDR,
                     supported: true,
                     requiresPro: true,
                     implementationStatus: .native
@@ -292,7 +292,7 @@ final class Delegate: PatternSpaceServerDelegate {
         }
         return GetOutputColorPresetResult(
             displayId: params.displayId,
-            catalogRevision: "2026-06-16.1",
+            catalogRevision: "2026-06-17.1",
             preset: OutputColorPresetConfig(
                 id: params.presetId,
                 label: "Device Native",

@@ -4,6 +4,16 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.6.0] - 2026-06-17
+
+### Added
+- Preset ID constants for three Linear HDR presets: `extLinearSRGBHDR`, `linearHDRP3D65`, `linearHDRBT2020`
+- `OutputColorPresetFamily.linearHDR` convenience constant for clients reading Linear HDR preset metadata
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.6.0`; PatternSpace JSON protocol remains `1.2`
+- Protocol documentation and README examples now describe Linear HDR presets and Peak White gating semantics
+
 ## [0.5.1] - 2026-06-17
 
 ### Added
