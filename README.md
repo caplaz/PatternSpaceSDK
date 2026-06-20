@@ -21,7 +21,7 @@ PatternSpaceSDK gives calibration tools and automation clients a typed Swift int
 - Swift 5.9+
 - macOS 12+
 - iOS 15+
-- PatternSpace JSON protocol `1.2`
+- PatternSpace JSON protocol `1.3`
 
 ## Installation
 
@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.6.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.7.0")
     ],
     targets: [
         .executableTarget(
@@ -103,6 +103,10 @@ if let selected = displays.displays.first(where: \.selected) {
             _ = try await client.display.setOutputColorPreset(displayId: selected.id, presetId: hdr.id)
         }
     }
+    _ = try await client.display.setMeasurementRange(
+        displayId: selected.id,
+        measurementRange: .legal
+    )
 }
 try await client.pattern.clear()
 client.disconnect()
@@ -180,7 +184,7 @@ final class Delegate: PatternSpaceServerDelegate {
                 displayInventory: true,
                 peakWhiteControl: true,
                 outputColorPresets: true,
-                measurementRange: false,
+                measurementRange: true,
                 catalogPatterns: true,
                 customICCBuilder: false,
                 httpBridge: false
@@ -209,8 +213,9 @@ final class Delegate: PatternSpaceServerDelegate {
                     peakWhiteRange: PeakWhiteRange(maximum: 4.0),
                     supportsPeakWhiteControl: false,
                     displayProfileResolved: true,
-                    outputColorPresetId: .deviceNative,
-                    supportedOutputColorPresetIds: [.deviceNative, .sdrReferenceSRGB, .hdrP3D65PQ, .extLinearSRGBHDR],
+                outputColorPresetId: .deviceNative,
+                selectedMeasurementRange: .full,
+                supportedOutputColorPresetIds: [.deviceNative, .sdrReferenceSRGB, .hdrP3D65PQ, .extLinearSRGBHDR],
                     outputColorPresetImplementationStatus: "native"
                 )
             ]
@@ -303,7 +308,6 @@ final class Delegate: PatternSpaceServerDelegate {
                 transfer: .displayNative,
                 dynamicRange: .sdr,
                 toneMapping: .none,
-                measurementRange: .full,
                 inputEncoding: .displayCode,
                 implementationStatus: .native,
                 supported: true,
@@ -391,6 +395,7 @@ Display methods:
 - `display.listOutputColorPresets`
 - `display.getOutputColorPreset`
 - `display.setOutputColorPreset`
+- `display.setMeasurementRange`
 
 Notifications:
 

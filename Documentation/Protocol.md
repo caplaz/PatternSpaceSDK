@@ -12,7 +12,7 @@ Bonjour service type:
 _patternspace._tcp
 ```
 
-The server advertises `protocolVersion=1.2` and `authRequired=true|false` in the TXT record.
+The server advertises `protocolVersion=1.3` and `authRequired=true|false` in the TXT record.
 
 ## Authentication
 
@@ -56,15 +56,15 @@ Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integra
   "jsonrpc": "2.0",
   "id": 0,
   "result": {
-    "protocolVersion": "1.2",
+    "protocolVersion": "1.3",
     "app": { "name": "PatternSpace", "version": "1.2.0", "build": "1" },
-    "sdkVersion": "0.6.0",
+    "sdkVersion": "0.7.0",
     "platform": "macOS",
     "authRequired": true,
     "namespaces": {
       "capabilities": ["list"],
       "device": ["info", "status"],
-      "display": ["list", "setPeakWhite", "listOutputColorPresets", "getOutputColorPreset", "setOutputColorPreset"],
+      "display": ["list", "setPeakWhite", "listOutputColorPresets", "getOutputColorPreset", "setOutputColorPreset", "setMeasurementRange"],
       "pattern": ["display", "displayColor", "displayPatch", "clear", "list", "get"]
     },
     "features": {
@@ -72,7 +72,7 @@ Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integra
       "displayInventory": true,
       "peakWhiteControl": true,
       "outputColorPresets": true,
-      "measurementRange": false,
+      "measurementRange": true,
       "catalogPatterns": true,
       "customICCBuilder": false,
       "httpBridge": false
@@ -321,7 +321,6 @@ Returns the full self-describing config for a known preset.
       "transfer": "pqSt2084",
       "dynamicRange": "hdr",
       "toneMapping": "none",
-      "measurementRange": "full",
       "inputEncoding": "pqSt2084",
       "implementationStatus": "native",
       "supported": true,
@@ -342,6 +341,10 @@ Returns the full self-describing config for a known preset.
 ```
 
 Hosts must return the config for any known preset, even when the current display cannot use it. In that case the preset config reports `supported: false`, an implementation status such as `insufficientHeadroom`, and an optional `unsupportedReason`. Throw `outputColorPresetUnsupported` only for genuinely unknown preset IDs.
+
+Measurement range is host-global runtime state, not an intrinsic preset field.
+Read the effective value from `selectedMeasurementRange` on `DisplayEntry` or
+`DeviceStatus`.
 
 ### `display.setOutputColorPreset`
 
@@ -383,6 +386,33 @@ Sets the host-global output color preset and returns the selected display that a
 ```
 
 Unknown preset IDs return `outputColorPresetUnsupported` (`-32012`) with `requestedPresetId`, `supportedPresetIds`, `scope`, and `reason` in error data. Known-but-unsupported presets are discoverable via `getOutputColorPreset`; writes to them also fail with `outputColorPresetUnsupported`. Pro entitlement failures use `notAuthorized` (`-32009`). If a host requires the write target to match selected output, mismatches return `displaySelectionMismatch` (`-32011`).
+
+### `display.setMeasurementRange`
+
+Sets the host-global measurement range to the open-string value `full` or
+`legal` and returns the effective selected range plus the updated display.
+
+```json
+{
+  "displayId": "69734272",
+  "measurementRange": "legal"
+}
+```
+
+```json
+{
+  "scope": "host",
+  "selectedMeasurementRange": "legal",
+  "selectedDisplayId": "69734272",
+  "display": {
+    "id": "69734272",
+    "selectedMeasurementRange": "legal"
+  }
+}
+```
+
+Legal range assumes full-range source values. Do not legal-encode in both the
+source and PatternSpace, or the signal will be encoded twice.
 
 ## Notifications
 
