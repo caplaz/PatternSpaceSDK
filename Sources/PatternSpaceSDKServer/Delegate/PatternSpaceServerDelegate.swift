@@ -62,6 +62,11 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Display configuration writes do not require the JSON source to be active.
     func setOutputColorPreset(_ params: SetOutputColorPresetParams) async throws -> SetOutputColorPresetResult
 
+    /// Sets the host-global measurement range when the display matches selected output.
+    ///
+    /// Display configuration writes do not require the JSON source to be active.
+    func setMeasurementRange(_ params: SetMeasurementRangeParams) async throws -> SetMeasurementRangeResult
+
     // MARK: Source state
 
     /// Returns true when the JSON source is the currently selected PatternSourceSelection.
@@ -98,6 +103,18 @@ public extension PatternSpaceServerDelegate {
             data: .object([
                 "requestedPresetId": .string(params.presetId.rawValue),
                 "supportedPresetIds": .array([]),
+                "scope": .string(ColorManagementScope.host.rawValue),
+                "reason": .string("unsupportedPlatform")
+            ])
+        )
+    }
+
+    func setMeasurementRange(_ params: SetMeasurementRangeParams) async throws -> SetMeasurementRangeResult {
+        throw PSDispatchError(
+            .outputColorPresetUnsupported,
+            data: .object([
+                "requestedMeasurementRange": .string(params.measurementRange.rawValue),
+                "supportedMeasurementRanges": .array([]),
                 "scope": .string(ColorManagementScope.host.rawValue),
                 "reason": .string("unsupportedPlatform")
             ])

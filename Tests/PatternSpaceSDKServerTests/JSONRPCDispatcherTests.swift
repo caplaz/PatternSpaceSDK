@@ -67,6 +67,7 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
     )
     var setPeakWhiteCalls: [SetPeakWhiteParams] = []
     var setOutputColorPresetCalls: [SetOutputColorPresetParams] = []
+    var setMeasurementRangeCalls: [SetMeasurementRangeParams] = []
     var getOutputColorPresetCalls: [GetOutputColorPresetParams] = []
     var unknownOutputPresetIds: Set<OutputColorPresetID> = []
     var unsupportedOutputPresetConfig: OutputColorPresetConfig?
@@ -178,6 +179,17 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
         return SetOutputColorPresetResult(
             scope: .host,
             selectedPresetId: params.presetId,
+            selectedDisplayId: display.id,
+            display: display
+        )
+    }
+
+    func setMeasurementRange(_ params: SetMeasurementRangeParams) async throws -> SetMeasurementRangeResult {
+        setMeasurementRangeCalls.append(params)
+        let display = displayList.displays[0]
+        return SetMeasurementRangeResult(
+            scope: .host,
+            selectedMeasurementRange: params.measurementRange,
             selectedDisplayId: display.id,
             display: display
         )
@@ -603,6 +615,37 @@ func responseObject(from data: Data) throws -> JSONValue {
         #expect(mock.setOutputColorPresetCalls.first?.presetId.rawValue == "vendor.future")
     }
 
+    @Test func displaySetMeasurementRangeDispatchesOpenStringToDelegate() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let resp = await d.dispatch(request(
+            method: "display.setMeasurementRange",
+            params: #"{"displayId":"69734272","measurementRange":"vendor.future"}"#
+        ))
+        let obj = try responseObject(from: resp)
+
+        #expect(obj.object?["result"]?.object?["selectedMeasurementRange"] == .string("vendor.future"))
+        #expect(mock.setMeasurementRangeCalls.first?.measurementRange.rawValue == "vendor.future")
+    }
+
+    @Test func displaySetMeasurementRangeRequiresNonEmptyFields() async throws {
+        let mock = MockDelegate()
+        let d = JSONRPCDispatcher(delegate: mock)
+
+        let missingDisplay = await d.dispatch(request(
+            method: "display.setMeasurementRange",
+            params: #"{"measurementRange":"legal"}"#
+        ))
+        let missingRange = await d.dispatch(request(
+            method: "display.setMeasurementRange",
+            params: #"{"displayId":"69734272"}"#
+        ))
+
+        #expect(try responseObject(from: missingDisplay).object?["error"]?.object?["code"] == .int(-32602))
+        #expect(try responseObject(from: missingRange).object?["error"]?.object?["code"] == .int(-32602))
+    }
+
     @Test func routeManifestMethodsDispatchWithoutMethodNotFound() async throws {
         for method in JSONRPCRoute.allCases.map(\.rawValue) {
             let mock = MockDelegate()
@@ -630,6 +673,8 @@ func responseObject(from data: Data) throws -> JSONValue {
             return #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
         case "display.setOutputColorPreset":
             return #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
+        case "display.setMeasurementRange":
+            return #"{"displayId":"69734272","measurementRange":"legal"}"#
         default:
             return "{}"
         }

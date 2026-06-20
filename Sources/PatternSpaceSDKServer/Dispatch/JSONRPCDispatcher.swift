@@ -17,6 +17,7 @@ enum JSONRPCRoute: String, CaseIterable {
     case displayListOutputColorPresets = "display.listOutputColorPresets"
     case displayGetOutputColorPreset = "display.getOutputColorPreset"
     case displaySetOutputColorPreset = "display.setOutputColorPreset"
+    case displaySetMeasurementRange = "display.setMeasurementRange"
 
     var namespace: String {
         rawValue.split(separator: ".", maxSplits: 1).map(String.init)[0]
@@ -115,6 +116,7 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         case .displayListOutputColorPresets: return try await handleListOutputColorPresets(params)
         case .displayGetOutputColorPreset: return try await handleGetOutputColorPreset(params)
         case .displaySetOutputColorPreset: return try await handleSetOutputColorPreset(params)
+        case .displaySetMeasurementRange: return try await handleSetMeasurementRange(params)
         }
     }
 
@@ -314,6 +316,31 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
             SetOutputColorPresetParams(
                 displayId: displayId,
                 presetId: OutputColorPresetID(rawValue: presetId)
+            )
+        ) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(result)
+    }
+
+    private func handleSetMeasurementRange(_ params: JSONValue?) async throws -> JSONValue {
+        let obj = params?.object ?? [:]
+        guard let displayId = obj["displayId"]?.string, !displayId.isEmpty else {
+            throw PSDispatchError(.invalidParams, message: "displayId (string) is required")
+        }
+        guard let measurementRange = obj["measurementRange"]?.string,
+              !measurementRange.isEmpty else {
+            throw PSDispatchError(
+                .invalidParams,
+                message: "measurementRange (string) is required"
+            )
+        }
+        guard let result = try await delegate?.setMeasurementRange(
+            SetMeasurementRangeParams(
+                displayId: displayId,
+                measurementRange: OutputColorPresetMeasurementRange(
+                    rawValue: measurementRange
+                )
             )
         ) else {
             throw PSDispatchError(.internalError)

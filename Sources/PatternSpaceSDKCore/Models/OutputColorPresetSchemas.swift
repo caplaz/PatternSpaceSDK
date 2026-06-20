@@ -457,3 +457,37 @@ public struct SetOutputColorPresetResult: Codable, Equatable, Sendable {
         self.display = display
     }
 }
+
+/// Parameters for `display.setMeasurementRange`.
+public struct SetMeasurementRangeParams: Codable, Equatable, Sendable {
+    public let displayId: String
+    public let measurementRange: OutputColorPresetMeasurementRange
+
+    public init(
+        displayId: String,
+        measurementRange: OutputColorPresetMeasurementRange
+    ) {
+        self.displayId = displayId
+        self.measurementRange = measurementRange
+    }
+}
+
+/// Result payload for `display.setMeasurementRange`.
+public struct SetMeasurementRangeResult: Codable, Equatable, Sendable {
+    public let scope: ColorManagementScope
+    public let selectedMeasurementRange: OutputColorPresetMeasurementRange
+    public let selectedDisplayId: String?
+    public let display: DisplayEntry
+
+    public init(
+        scope: ColorManagementScope,
+        selectedMeasurementRange: OutputColorPresetMeasurementRange,
+        selectedDisplayId: String?,
+        display: DisplayEntry
+    ) {
+        self.scope = scope
+        self.selectedMeasurementRange = selectedMeasurementRange
+        self.selectedDisplayId = selectedDisplayId
+        self.display = display
+    }
+}
