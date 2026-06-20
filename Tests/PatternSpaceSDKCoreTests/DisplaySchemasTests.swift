@@ -121,7 +121,6 @@ import Testing
             transfer: .gamma24,
             dynamicRange: .sdr,
             toneMapping: .none,
-            measurementRange: .full,
             inputEncoding: .gamma24,
             implementationStatus: .native,
             supported: true,
@@ -134,7 +133,7 @@ import Testing
         #expect(json["transfer"] as? String == "gamma2.4")
         #expect(json["dynamicRange"] as? String == "sdr")
         #expect(json["toneMapping"] as? String == "none")
-        #expect(json["measurementRange"] as? String == "full")
+        #expect(json["measurementRange"] == nil)
         #expect(json["inputEncoding"] as? String == "gamma2.4")
         #expect(json["implementationStatus"] as? String == "native")
         #expect(json["supported"] as? Bool == true)
@@ -155,7 +154,6 @@ import Testing
                 transfer: .displayNative,
                 dynamicRange: .sdr,
                 toneMapping: .none,
-                measurementRange: .full,
                 inputEncoding: .displayCode,
                 implementationStatus: .native,
                 supported: true,
@@ -202,7 +200,6 @@ import Testing
                 transfer: .displayNative,
                 dynamicRange: .sdr,
                 toneMapping: .none,
-                measurementRange: .full,
                 inputEncoding: .displayCode,
                 implementationStatus: .native,
                 supported: true,
@@ -321,6 +318,7 @@ import Testing
           "supportsPeakWhiteControl":true,
           "supportedColorManagementModes":["deviceNative","managedSRGB"],
           "outputColorPresetId":"hdrBT2020PQ",
+          "selectedMeasurementRange":"legal",
           "supportedOutputColorPresetIds":["deviceNative","hdrBT2020PQ"],
           "outputColorPresetImplementationStatus":"native"
         }
@@ -329,6 +327,7 @@ import Testing
         let entry = try JSONDecoder().decode(DisplayEntry.self, from: Data(json.utf8))
 
         #expect(entry.outputColorPresetId == .hdrBT2020PQ)
+        #expect(entry.selectedMeasurementRange == .legal)
         #expect(entry.supportedOutputColorPresetIds.contains(.deviceNative))
         #expect(entry.outputColorPresetImplementationStatus == "native")
     }

@@ -273,7 +273,6 @@ public struct OutputColorPresetConfig: Codable, Equatable, Sendable {
     public let transfer: OutputColorPresetTransfer
     public let dynamicRange: OutputColorPresetDynamicRange
     public let toneMapping: OutputColorPresetToneMapping
-    public let measurementRange: OutputColorPresetMeasurementRange
     public let inputEncoding: OutputColorPresetInputEncoding
     public let implementationStatus: OutputColorPresetImplementationStatus
     public let supported: Bool
@@ -300,7 +299,6 @@ public struct OutputColorPresetConfig: Codable, Equatable, Sendable {
         transfer: OutputColorPresetTransfer,
         dynamicRange: OutputColorPresetDynamicRange,
         toneMapping: OutputColorPresetToneMapping,
-        measurementRange: OutputColorPresetMeasurementRange,
         inputEncoding: OutputColorPresetInputEncoding,
         implementationStatus: OutputColorPresetImplementationStatus,
         supported: Bool,
@@ -326,7 +324,6 @@ public struct OutputColorPresetConfig: Codable, Equatable, Sendable {
         self.transfer = transfer
         self.dynamicRange = dynamicRange
         self.toneMapping = toneMapping
-        self.measurementRange = measurementRange
         self.inputEncoding = inputEncoding
         self.implementationStatus = implementationStatus
         self.supported = supported

@@ -51,6 +51,7 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         case supportsPeakWhiteControl
         case displayProfileResolved
         case outputColorPresetId
+        case selectedMeasurementRange
         case supportedOutputColorPresetIds
         case outputColorPresetImplementationStatus
     }
@@ -103,6 +104,9 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
     /// Host-global output color preset currently applied to patch output.
     public let outputColorPresetId: OutputColorPresetID?
 
+    /// Effective host-global measurement range currently applied to this display.
+    public let selectedMeasurementRange: OutputColorPresetMeasurementRange?
+
     /// Output color preset IDs currently supported for this display.
     public let supportedOutputColorPresetIds: [OutputColorPresetID]
 
@@ -143,6 +147,7 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
             supportsPeakWhiteControl: supportsPeakWhiteControl,
             displayProfileResolved: nil,
             outputColorPresetId: nil,
+            selectedMeasurementRange: nil,
             supportedOutputColorPresetIds: [],
             outputColorPresetImplementationStatus: nil
         )
@@ -166,6 +171,7 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         supportsPeakWhiteControl: Bool,
         displayProfileResolved: Bool?,
         outputColorPresetId: OutputColorPresetID? = nil,
+        selectedMeasurementRange: OutputColorPresetMeasurementRange? = nil,
         supportedOutputColorPresetIds: [OutputColorPresetID] = [],
         outputColorPresetImplementationStatus: String? = nil
     ) {
@@ -185,6 +191,7 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.supportsPeakWhiteControl = supportsPeakWhiteControl
         self.displayProfileResolved = displayProfileResolved
         self.outputColorPresetId = outputColorPresetId
+        self.selectedMeasurementRange = selectedMeasurementRange
         self.supportedOutputColorPresetIds = supportedOutputColorPresetIds
         self.outputColorPresetImplementationStatus = outputColorPresetImplementationStatus
     }
@@ -207,6 +214,10 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         self.supportsPeakWhiteControl = try container.decode(Bool.self, forKey: .supportsPeakWhiteControl)
         self.displayProfileResolved = try container.decodeIfPresent(Bool.self, forKey: .displayProfileResolved)
         self.outputColorPresetId = try container.decodeIfPresent(OutputColorPresetID.self, forKey: .outputColorPresetId)
+        self.selectedMeasurementRange = try container.decodeIfPresent(
+            OutputColorPresetMeasurementRange.self,
+            forKey: .selectedMeasurementRange
+        )
         self.supportedOutputColorPresetIds = try container.decodeIfPresent([OutputColorPresetID].self, forKey: .supportedOutputColorPresetIds) ?? []
         self.outputColorPresetImplementationStatus = try container.decodeIfPresent(String.self, forKey: .outputColorPresetImplementationStatus)
     }
@@ -229,6 +240,7 @@ public struct DisplayEntry: Codable, Sendable, Equatable {
         try container.encode(supportsPeakWhiteControl, forKey: .supportsPeakWhiteControl)
         try container.encodeIfPresent(displayProfileResolved, forKey: .displayProfileResolved)
         try container.encodeIfPresent(outputColorPresetId, forKey: .outputColorPresetId)
+        try container.encodeIfPresent(selectedMeasurementRange, forKey: .selectedMeasurementRange)
         try container.encode(supportedOutputColorPresetIds, forKey: .supportedOutputColorPresetIds)
         try container.encodeIfPresent(outputColorPresetImplementationStatus, forKey: .outputColorPresetImplementationStatus)
     }
