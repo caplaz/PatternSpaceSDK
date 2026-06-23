@@ -4,6 +4,14 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.2] - 2026-06-23
+
+### Fixed
+- `PatternSpaceServer` now fires `onClientDisconnected` when the last active (upgraded) client disconnects. Previously the server silently removed the client from its tracking dict with no notification to the host, leaving the host app stuck in a "connected" state until a new client connected or the server restarted. The callback is suppressed when `stop()` drives the close (server shutdown already sets status to idle) and when a client is evicted by a new one (the new client is already active).
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.2`; PatternSpace JSON protocol remains `1.3`.
+
 ## [0.7.1] - 2026-06-23
 
 ### Fixed

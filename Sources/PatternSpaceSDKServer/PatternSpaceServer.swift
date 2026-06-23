@@ -18,6 +18,9 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private var pendingClients: [ObjectIdentifier: ClientConnection] = [:]
     private let lock = NSLock()
 
+    /// Called on a background queue when the last active (upgraded) client disconnects.
+    public var onClientDisconnected: (() -> Void)?
+
     /// Creates a PatternSpace protocol server.
     ///
     /// - Parameters:
@@ -124,9 +127,14 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private func remove(_ client: ClientConnection) {
         lock.lock()
         let id = ObjectIdentifier(client)
-        clients.removeValue(forKey: id)
+        let wasActive = clients.removeValue(forKey: id) != nil
         pendingClients.removeValue(forKey: id)
+        let noMoreActive = clients.isEmpty
         lock.unlock()
+
+        if wasActive && noMoreActive {
+            onClientDisconnected?()
+        }
     }
 
     private func sendConnectionReady(_ params: ConnectionReadyParams, to client: ClientConnection) {
