@@ -15,5 +15,6 @@ let package = Package(
         .target(name: "PatternSpaceSDKServer", dependencies: ["PatternSpaceSDKCore"]),
         .testTarget(name: "PatternSpaceSDKCoreTests",   dependencies: ["PatternSpaceSDKCore"],   path: "Tests/PatternSpaceSDKCoreTests"),
         .testTarget(name: "PatternSpaceSDKServerTests", dependencies: ["PatternSpaceSDKServer"], path: "Tests/PatternSpaceSDKServerTests"),
+        .testTarget(name: "PatternSpaceSDKClientTests", dependencies: ["PatternSpaceSDKClient"], path: "Tests/PatternSpaceSDKClientTests"),
     ]
 )

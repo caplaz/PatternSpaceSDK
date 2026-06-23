@@ -4,6 +4,15 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.3] - 2026-06-23
+
+### Fixed
+- `PatternSpaceClient` now emits `.connectionFailed` for clean server-side closes (WebSocket close frame, nil error), not only for transport errors. Previously a clean close was silent — the event stream yielded nothing, leaving UI consumers (e.g. the iOS Remote tab) stuck showing "Connected" while the client was silently retrying. With this fix any unintentional disconnect, clean or error, surfaces as `.connectionFailed` so consumers can transition to a failure state immediately. Auto-reconnect still fires; if the server comes back the next `connectionReady` notification returns the consumer to connected.
+- `PatternSpaceClientError` now conforms to `LocalizedError`, providing a readable `errorDescription` ("The server closed the connection") instead of the default Swift error description.
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.3`; PatternSpace JSON protocol remains `1.3`.
+
 ## [0.7.2] - 2026-06-23
 
 ### Fixed

@@ -22,9 +22,15 @@ public struct PatternSpaceService: Sendable {
 }
 
 /// Errors raised by the high-level PatternSpace client.
-public enum PatternSpaceClientError: Error, Sendable {
+public enum PatternSpaceClientError: Error, LocalizedError, Sendable {
     /// The WebSocket transport disconnected while a request was pending.
     case disconnected
+
+    public var errorDescription: String? {
+        switch self {
+        case .disconnected: return "The server closed the connection"
+        }
+    }
 }
 
 /// High-level client for the PatternSpace JSON protocol.
@@ -76,11 +82,10 @@ public final class PatternSpaceClient: @unchecked Sendable {
         }
         transport.onDisconnect = { [weak self] error in
             guard let self else { return }
-            self.session.failAllPending(with: error ?? PatternSpaceClientError.disconnected)
+            let reason = error ?? PatternSpaceClientError.disconnected
+            self.session.failAllPending(with: reason)
             guard !self.intentionallyDisconnected else { return }
-            if let error {
-                self.eventContinuation.yield(.connectionFailed(error))
-            }
+            self.eventContinuation.yield(.connectionFailed(reason))
             self.scheduleReconnect()
         }
     }
