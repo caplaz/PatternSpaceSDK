@@ -86,11 +86,21 @@ public enum WebSocketFrameCodec {
     /// Decodes one client-to-server frame from the beginning of a buffer.
     ///
     /// Client frames must be masked according to the WebSocket specification.
+    ///
+    /// Indexing is relative to `buffer.startIndex` throughout, and `consumed` is
+    /// returned as a byte count (not an absolute index). This matters because
+    /// `Data` preserves a non-zero `startIndex` after `removeFirst(_:)`, so a
+    /// buffer holding the second-or-later frame on a connection does not start at
+    /// index 0. Mixing absolute indices with `buffer.count` previously made the
+    /// length guards unsatisfiable on such buffers, stalling multi-request
+    /// connections (the frame decoded as perpetually `.incomplete`).
     public static func decode(from buffer: Data) -> FrameDecodeResult {
-        guard buffer.count >= 2 else { return .incomplete }
+        let base = buffer.startIndex
+        let available = buffer.count
+        guard available >= 2 else { return .incomplete }
 
-        let first = buffer[buffer.startIndex]
-        let second = buffer[buffer.startIndex + 1]
+        let first = buffer[base]
+        let second = buffer[base + 1]
         let fin = (first & 0x80) != 0
         guard let opcode = WebSocketFrame.Opcode(rawValue: first & 0x0f) else {
             return .protocolError
@@ -99,31 +109,37 @@ public enum WebSocketFrameCodec {
         guard (second & 0x80) != 0 else { return .protocolError }
 
         var payloadLength = Int(second & 0x7f)
-        var offset = buffer.startIndex + 2
+        var cursor = 2 // bytes consumed so far, relative to base
 
         if payloadLength == 126 {
-            guard buffer.count >= offset + 2 else { return .incomplete }
-            payloadLength = Int(buffer[offset]) << 8 | Int(buffer[offset + 1])
-            offset += 2
+            guard available >= cursor + 2 else { return .incomplete }
+            payloadLength = Int(buffer[base + cursor]) << 8 | Int(buffer[base + cursor + 1])
+            cursor += 2
         } else if payloadLength == 127 {
-            guard buffer.count >= offset + 8 else { return .incomplete }
-            payloadLength = (0..<8).reduce(0) { ($0 << 8) | Int(buffer[offset + $1]) }
-            offset += 8
+            guard available >= cursor + 8 else { return .incomplete }
+            payloadLength = (0..<8).reduce(0) { ($0 << 8) | Int(buffer[base + cursor + $1]) }
+            cursor += 8
         }
 
         guard payloadLength <= maxPayloadBytes else { return .oversized }
-        guard buffer.count >= offset + 4 else { return .incomplete }
+        guard available >= cursor + 4 else { return .incomplete }
 
-        let maskKey = [buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]]
-        offset += 4
+        let maskKey = [
+            buffer[base + cursor],
+            buffer[base + cursor + 1],
+            buffer[base + cursor + 2],
+            buffer[base + cursor + 3]
+        ]
+        cursor += 4
 
-        guard buffer.count >= offset + payloadLength else { return .incomplete }
-        var payload = Data(buffer[offset..<(offset + payloadLength)])
+        guard available >= cursor + payloadLength else { return .incomplete }
+        let payloadStart = base + cursor
+        var payload = Data(buffer[payloadStart..<(payloadStart + payloadLength)])
         for index in 0..<payload.count {
             payload[index] ^= maskKey[index % 4]
         }
 
         return .frame(WebSocketFrame(opcode: opcode, payload: payload, fin: fin),
-                      consumed: offset + payloadLength)
+                      consumed: cursor + payloadLength)
     }
 }

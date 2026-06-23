@@ -4,6 +4,14 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.4] - 2026-06-23
+
+### Fixed
+- `WebSocketFrameCodec.decode` now decodes the second and later frames on a connection. It indexed with absolute `Data` offsets while comparing against `Data.count`, and returned `consumed` as an absolute index rather than a byte count. Because `Data` keeps a non-zero `startIndex` after `removeFirst(_:)`, every frame after the first decoded as perpetually `.incomplete`, so a client sending more than one request on a single connection would hang waiting for a response that was never dispatched. Decoding is now fully relative to `startIndex` and `consumed` is a true byte count. Single-request connections were unaffected (their buffers always started at index 0), which is why this only surfaced with multi-request sessions.
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.4`; PatternSpace JSON protocol remains `1.3`.
+
 ## [0.7.3] - 2026-06-23
 
 ### Fixed

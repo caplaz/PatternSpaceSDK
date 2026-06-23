@@ -48,7 +48,7 @@ import Foundation
           "connectedClientCount":1,
           "appVersion":"1.1.0",
           "buildNumber":"123",
-          "sdkVersion":"0.7.3",
+          "sdkVersion":"0.7.4",
           "protocolVersion":"1.3",
           "outputColorPresetId":"hdrBT2020PQ",
           "selectedMeasurementRange":"legal",
