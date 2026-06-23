@@ -6,6 +6,11 @@ PatternSpaceSDK speaks a JSON-RPC 2.0 subset over WebSocket.
 ws://<host>:7878/patternspace
 ```
 
+`/patternspace` is the canonical path, but the server accepts the upgrade on any
+resource path (e.g. `/`) so that hostPort and Bonjour client endpoints — which
+cannot carry a path — can connect. The bearer token is the authentication
+boundary.
+
 Bonjour service type:
 
 ```text

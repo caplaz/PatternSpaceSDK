@@ -365,6 +365,11 @@ The SDK uses JSON-RPC 2.0 envelopes over WebSocket at:
 ws://<host>:7878/patternspace
 ```
 
+`/patternspace` is the canonical path. The server also accepts upgrades on any
+path (for example `/`), because `NWProtocolWebSocket` clients connecting through
+a hostPort or Bonjour service endpoint cannot attach a path. Authentication is
+enforced by the bearer token, not the path.
+
 Supported method namespaces:
 
 Patch color methods:

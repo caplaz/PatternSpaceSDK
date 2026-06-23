@@ -84,12 +84,32 @@ Sec-WebSocket-Version: 13\r
         }
     }
 
-    @Test func rejectsWrongPath() {
+    @Test func acceptsRootPath() {
+        // hostPort and Bonjour service endpoints upgrade against "/" because
+        // NWProtocolWebSocket cannot attach a path to those endpoints.
         let handler = WebSocketUpgradeHandler(token: nil)
-        let wrong = unauthRequest.replacingOccurrences(of: "/patternspace", with: "/other")
-        if case .reject = handler.handle(requestData: Data(wrong.utf8)) {
+        let rootPath = unauthRequest.replacingOccurrences(of: "GET /patternspace HTTP/1.1", with: "GET / HTTP/1.1")
+        if case .accept = handler.handle(requestData: Data(rootPath.utf8)) {
         } else {
-            Issue.record("Expected reject for wrong path")
+            Issue.record("Expected accept for root path")
+        }
+    }
+
+    @Test func acceptsArbitraryPath() {
+        let handler = WebSocketUpgradeHandler(token: nil)
+        let other = unauthRequest.replacingOccurrences(of: "/patternspace", with: "/other")
+        if case .accept = handler.handle(requestData: Data(other.utf8)) {
+        } else {
+            Issue.record("Expected accept for arbitrary path")
+        }
+    }
+
+    @Test func rejectsMalformedRequestLine() {
+        let handler = WebSocketUpgradeHandler(token: nil)
+        let malformed = unauthRequest.replacingOccurrences(of: "GET /patternspace HTTP/1.1", with: "GET /patternspace")
+        if case .reject = handler.handle(requestData: Data(malformed.utf8)) {
+        } else {
+            Issue.record("Expected reject for malformed request line")
         }
     }
 

@@ -31,8 +31,16 @@ public struct WebSocketUpgradeHandler: Sendable {
         let lines = text.components(separatedBy: "\r\n")
         let headers = parseHeaders(lines)
 
-        guard let requestLine = lines.first,
-              requestLine == "GET /patternspace HTTP/1.1" else {
+        // Accept the upgrade on any resource path. `/patternspace` is the
+        // canonical path, but `NWProtocolWebSocket` clients that connect via a
+        // hostPort or Bonjour service endpoint upgrade against `/` and cannot
+        // attach a path. The bearer token — not the path — is the authentication
+        // boundary, so any well-formed `GET … HTTP/1.1` target is accepted.
+        let requestComponents = (lines.first ?? "")
+            .split(separator: " ", maxSplits: 2, omittingEmptySubsequences: false)
+        guard requestComponents.count == 3,
+              requestComponents[0] == "GET",
+              requestComponents[2] == "HTTP/1.1" else {
             return .reject(httpResponse("400 Bad Request", headers: [:]))
         }
 

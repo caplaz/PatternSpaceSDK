@@ -4,6 +4,15 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.1] - 2026-06-23
+
+### Fixed
+- `PatternSpaceServer` now responds to WebSocket upgrade requests. Each incoming connection was released as soon as it was accepted — before its HTTP upgrade was processed — so the handshake never completed and clients timed out with no response. Connections are now retained until they upgrade or close.
+- WebSocket upgrades are accepted on any resource path. `NWProtocolWebSocket` clients connecting through a hostPort or Bonjour service endpoint upgrade against `/` (such endpoints cannot carry a path), which the server previously rejected with `400 Bad Request`. The canonical path remains `/patternspace`, and the bearer token — not the path — stays the authentication boundary.
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.1`; PatternSpace JSON protocol remains `1.3`.
+
 ## [0.7.0] - 2026-06-19
 
 ### Added

@@ -4,9 +4,10 @@ import PatternSpaceSDKCore
 
 /// WebSocket JSON-RPC server for embedding PatternSpace protocol support.
 ///
-/// The server advertises itself with Bonjour, accepts WebSocket connections on
-/// `/patternspace`, validates incoming requests, and forwards protocol actions
-/// to a `PatternSpaceServerDelegate`.
+/// The server advertises itself with Bonjour, accepts WebSocket connections
+/// (canonically on `/patternspace`, though any resource path is accepted so
+/// hostPort and Bonjour clients can connect), validates incoming requests, and
+/// forwards protocol actions to a `PatternSpaceServerDelegate`.
 public final class PatternSpaceServer: @unchecked Sendable {
     private let token: String?
     private let upgradeHandler: WebSocketUpgradeHandler
@@ -14,6 +15,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private let buildConnectionReady: (Bool) -> ConnectionReadyParams
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
+    private var pendingClients: [ObjectIdentifier: ClientConnection] = [:]
     private let lock = NSLock()
 
     /// Creates a PatternSpace protocol server.
@@ -57,8 +59,9 @@ public final class PatternSpaceServer: @unchecked Sendable {
         listener = nil
 
         lock.lock()
-        let snapshot = Array(clients.values)
+        let snapshot = Array(clients.values) + Array(pendingClients.values)
         clients.removeAll()
+        pendingClients.removeAll()
         lock.unlock()
 
         snapshot.forEach { $0.close() }
@@ -97,12 +100,21 @@ public final class PatternSpaceServer: @unchecked Sendable {
             }
         )
 
+        // Retain the connection until it either upgrades (moves to `clients`)
+        // or closes. Without this, `client` has no strong owner once `accept`
+        // returns, so it deallocates before the WebSocket upgrade is processed
+        // and the server never responds to the handshake.
+        lock.lock()
+        pendingClients[ObjectIdentifier(client)] = client
+        lock.unlock()
+
         client.start()
     }
 
     private func registerAndEvictExisting(_ client: ClientConnection) -> [ClientConnection] {
         lock.lock()
         let newID = ObjectIdentifier(client)
+        pendingClients.removeValue(forKey: newID)
         let evicted = clients.filter { $0.key != newID }.map(\.value)
         clients = [newID: client]
         lock.unlock()
@@ -111,7 +123,9 @@ public final class PatternSpaceServer: @unchecked Sendable {
 
     private func remove(_ client: ClientConnection) {
         lock.lock()
-        clients.removeValue(forKey: ObjectIdentifier(client))
+        let id = ObjectIdentifier(client)
+        clients.removeValue(forKey: id)
+        pendingClients.removeValue(forKey: id)
         lock.unlock()
     }
 
