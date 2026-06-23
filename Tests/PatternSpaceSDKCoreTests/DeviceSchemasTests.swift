@@ -48,9 +48,10 @@ import Foundation
           "connectedClientCount":1,
           "appVersion":"1.1.0",
           "buildNumber":"123",
-          "sdkVersion":"0.6.0",
-          "protocolVersion":"1.2",
+          "sdkVersion":"0.7.0",
+          "protocolVersion":"1.3",
           "outputColorPresetId":"hdrBT2020PQ",
+          "selectedMeasurementRange":"legal",
           "outputColorPresetImplementationStatus":"native",
           "edrHeadroomPotential":4.0,
           "edrHeadroomCurrent":2.0,
@@ -74,6 +75,7 @@ import Foundation
         #expect(status.sdkVersion == PatternSpaceProtocolMetadata.sdkVersion)
         #expect(status.protocolVersion == PatternSpaceProtocolMetadata.protocolVersion)
         #expect(status.outputColorPresetId == .hdrBT2020PQ)
+        #expect(status.selectedMeasurementRange == .legal)
         #expect(status.outputColorPresetImplementationStatus == "native")
         #expect(status.edrHeadroomPotential == 4.0)
         #expect(status.edrHeadroomCurrent == 2.0)

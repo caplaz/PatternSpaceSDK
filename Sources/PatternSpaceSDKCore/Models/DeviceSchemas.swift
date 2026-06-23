@@ -83,6 +83,9 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
     /// Host-global output color preset currently selected, if reported.
     public let outputColorPresetId: OutputColorPresetID?
 
+    /// Effective host-global measurement range currently selected, if reported.
+    public let selectedMeasurementRange: OutputColorPresetMeasurementRange?
+
     /// Open-string implementation status for the selected output color preset.
     public let outputColorPresetImplementationStatus: String?
 
@@ -122,6 +125,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
             sdkVersion: nil,
             protocolVersion: nil,
             outputColorPresetId: nil,
+            selectedMeasurementRange: nil,
             outputColorPresetImplementationStatus: nil,
             edrHeadroomPotential: nil,
             edrHeadroomCurrent: nil,
@@ -147,6 +151,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         sdkVersion: String?,
         protocolVersion: String?,
         outputColorPresetId: OutputColorPresetID? = nil,
+        selectedMeasurementRange: OutputColorPresetMeasurementRange? = nil,
         outputColorPresetImplementationStatus: String? = nil,
         edrHeadroomPotential: Double? = nil,
         edrHeadroomCurrent: Double? = nil,
@@ -168,6 +173,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         self.sdkVersion = sdkVersion
         self.protocolVersion = protocolVersion
         self.outputColorPresetId = outputColorPresetId
+        self.selectedMeasurementRange = selectedMeasurementRange
         self.outputColorPresetImplementationStatus = outputColorPresetImplementationStatus
         self.edrHeadroomPotential = edrHeadroomPotential
         self.edrHeadroomCurrent = edrHeadroomCurrent

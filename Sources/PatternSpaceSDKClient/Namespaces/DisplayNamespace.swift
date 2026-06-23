@@ -73,4 +73,22 @@ public final class DisplayNamespace: Sendable {
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode(SetOutputColorPresetResult.self, from: data)
     }
+
+    /// Sets the host-global measurement range for the selected display.
+    public func setMeasurementRange(
+        displayId: String,
+        measurementRange: OutputColorPresetMeasurementRange
+    ) async throws -> SetMeasurementRangeResult {
+        let params = SetMeasurementRangeParams(
+            displayId: displayId,
+            measurementRange: measurementRange
+        )
+        let result = try await session.send(
+            method: "display.setMeasurementRange",
+            params: params,
+            via: transport
+        )
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(SetMeasurementRangeResult.self, from: data)
+    }
 }

@@ -273,7 +273,6 @@ public struct OutputColorPresetConfig: Codable, Equatable, Sendable {
     public let transfer: OutputColorPresetTransfer
     public let dynamicRange: OutputColorPresetDynamicRange
     public let toneMapping: OutputColorPresetToneMapping
-    public let measurementRange: OutputColorPresetMeasurementRange
     public let inputEncoding: OutputColorPresetInputEncoding
     public let implementationStatus: OutputColorPresetImplementationStatus
     public let supported: Bool
@@ -300,7 +299,6 @@ public struct OutputColorPresetConfig: Codable, Equatable, Sendable {
         transfer: OutputColorPresetTransfer,
         dynamicRange: OutputColorPresetDynamicRange,
         toneMapping: OutputColorPresetToneMapping,
-        measurementRange: OutputColorPresetMeasurementRange,
         inputEncoding: OutputColorPresetInputEncoding,
         implementationStatus: OutputColorPresetImplementationStatus,
         supported: Bool,
@@ -326,7 +324,6 @@ public struct OutputColorPresetConfig: Codable, Equatable, Sendable {
         self.transfer = transfer
         self.dynamicRange = dynamicRange
         self.toneMapping = toneMapping
-        self.measurementRange = measurementRange
         self.inputEncoding = inputEncoding
         self.implementationStatus = implementationStatus
         self.supported = supported
@@ -456,6 +453,40 @@ public struct SetOutputColorPresetResult: Codable, Equatable, Sendable {
     ) {
         self.scope = scope
         self.selectedPresetId = selectedPresetId
+        self.selectedDisplayId = selectedDisplayId
+        self.display = display
+    }
+}
+
+/// Parameters for `display.setMeasurementRange`.
+public struct SetMeasurementRangeParams: Codable, Equatable, Sendable {
+    public let displayId: String
+    public let measurementRange: OutputColorPresetMeasurementRange
+
+    public init(
+        displayId: String,
+        measurementRange: OutputColorPresetMeasurementRange
+    ) {
+        self.displayId = displayId
+        self.measurementRange = measurementRange
+    }
+}
+
+/// Result payload for `display.setMeasurementRange`.
+public struct SetMeasurementRangeResult: Codable, Equatable, Sendable {
+    public let scope: ColorManagementScope
+    public let selectedMeasurementRange: OutputColorPresetMeasurementRange
+    public let selectedDisplayId: String?
+    public let display: DisplayEntry
+
+    public init(
+        scope: ColorManagementScope,
+        selectedMeasurementRange: OutputColorPresetMeasurementRange,
+        selectedDisplayId: String?,
+        display: DisplayEntry
+    ) {
+        self.scope = scope
+        self.selectedMeasurementRange = selectedMeasurementRange
         self.selectedDisplayId = selectedDisplayId
         self.display = display
     }

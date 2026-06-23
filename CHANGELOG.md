@@ -4,6 +4,18 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.0] - 2026-06-19
+
+### Added
+- `display.setMeasurementRange` server route, delegate hook, client method, params, and result schemas
+- Additive `selectedMeasurementRange` fields on `DisplayEntry` and `DeviceStatus`
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.0`; PatternSpace JSON protocol is now `1.3`
+
+### Removed
+- Per-preset `measurementRange` from `OutputColorPresetConfig`; measurement range is host-global runtime state
+
 ## [0.6.0] - 2026-06-17
 
 ### Added
