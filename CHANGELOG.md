@@ -4,6 +4,16 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.5] - 2026-09-10
+
+### Fixed
+- Explicit host/IP connections now use `URLSessionWebSocketTask` rather than `NWProtocolWebSocket`. On macOS 26, the latter could abort during the WebSocket upgrade against the PatternSpace server even while the server was listening and standards-compliant WebSocket clients connected successfully. Bonjour-discovered services retain the native Network.framework transport, which continues to resolve and connect correctly.
+- Explicit `PatternSpaceClient.disconnect()` now fails pending JSON-RPC requests, rather than leaving an awaiting caller suspended after the transport has been closed.
+
+### Changed
+- Added a client/server integration test that exercises an authenticated `device.status` request over a real loopback WebSocket connection.
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.5`; PatternSpace JSON protocol remains `1.3`.
+
 ## [0.7.4] - 2026-06-23
 
 ### Fixed

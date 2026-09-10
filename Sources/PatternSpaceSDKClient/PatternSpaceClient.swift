@@ -104,6 +104,7 @@ public final class PatternSpaceClient: @unchecked Sendable {
     /// Closes the connection and finishes the event stream.
     public func disconnect() {
         intentionallyDisconnected = true
+        session.failAllPending(with: PatternSpaceClientError.disconnected)
         transport.disconnect()
         eventContinuation.finish()
     }

@@ -72,7 +72,7 @@ import Foundation
         #expect(status.connectedClientCount == 1)
         #expect(status.appVersion == "1.1.0")
         #expect(status.buildNumber == "123")
-        #expect(status.sdkVersion == PatternSpaceProtocolMetadata.sdkVersion)
+        #expect(status.sdkVersion == "0.7.4")
         #expect(status.protocolVersion == PatternSpaceProtocolMetadata.protocolVersion)
         #expect(status.outputColorPresetId == .hdrBT2020PQ)
         #expect(status.selectedMeasurementRange == .legal)
