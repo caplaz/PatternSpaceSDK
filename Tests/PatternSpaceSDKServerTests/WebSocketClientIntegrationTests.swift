@@ -55,7 +55,10 @@ import PatternSpaceSDKCore
                 throw WebSocketClientTestError.timedOut
             }
             defer { group.cancelAll() }
-            return try await #require(group.next())
+            guard let status = try await group.next() else {
+                throw WebSocketClientTestError.timedOut
+            }
+            return status
         }
     }
 }

@@ -4,6 +4,14 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [0.7.6] - 2026-09-10
+
+### Fixed
+- Made the WebSocket client integration test compatible with the Swift Testing version used by GitHub Actions. `TaskGroup.next()` is mutating and cannot be passed through that runner's `#require` macro; the test now unwraps its result with ordinary `guard` handling.
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `0.7.6`; PatternSpace JSON protocol remains `1.3`.
+
 ## [0.7.5] - 2026-09-10
 
 ### Fixed
