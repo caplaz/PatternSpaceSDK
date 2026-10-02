@@ -4,23 +4,41 @@ import PatternSpaceSDKCore
 /// Server-side integration point implemented by a PatternSpace host app.
 ///
 /// `PatternSpaceServer` receives JSON-RPC requests and forwards validated
-/// operations to this delegate. Write methods are invoked only while
-/// `isSourceActive` is `true`.
+/// operations to this delegate. Output-write methods are invoked only while
+/// `isSourceActive` is `true`, and always receive the `OutputRequestContext`
+/// of the client connection that sent the request. Hosts must validate that
+/// context against their current connection before mutating output.
 public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
 
-    // MARK: Pattern write — only invoked when isSourceActive == true
+    // MARK: Output write — only invoked when isSourceActive == true
 
     /// Displays an app-provided pattern by protocol identifier.
-    func displayPattern(id: String) async throws
+    func displayPattern(id: String, context: OutputRequestContext) async throws
 
     /// Displays a full-screen solid color.
-    func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws
+    func displayColor(_ color: PSColor, bitDepth: BitDepth,
+                      context: OutputRequestContext) async throws
 
     /// Displays one or more normalized rectangles over a background color.
-    func displayPatch(_ params: PatchParams) async throws
+    func displayPatch(_ params: PatchParams, context: OutputRequestContext) async throws
 
     /// Clears the current JSON protocol pattern.
-    func clearDisplay() async throws
+    func clearDisplay(context: OutputRequestContext) async throws
+
+    /// Blanks the output and returns the resulting status (`output.blank`).
+    ///
+    /// Returns after the blank is confirmed, or with the current status if it
+    /// was superseded. Throw `PSDispatchError(.outputNotConfirmed)` when the
+    /// blank failed or output state is unknown. Hosts without blank support
+    /// must throw `PSDispatchError(.methodNotFound)` and omit
+    /// `CapabilitiesResult.outputBlank`.
+    func blankOutput(context: OutputRequestContext) async throws -> OutputStatus
+
+    /// Cancels a pending or active blank and returns the resulting status (`output.resume`).
+    ///
+    /// Throw `PSDispatchError(.outputNotConfirmed)` when output state is unknown.
+    /// Hosts without blank support must throw `PSDispatchError(.methodNotFound)`.
+    func resumeOutput(context: OutputRequestContext) async throws -> OutputStatus
 
     // MARK: Read — always invoked
 

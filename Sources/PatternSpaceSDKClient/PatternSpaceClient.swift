@@ -51,6 +51,9 @@ public final class PatternSpaceClient: @unchecked Sendable {
     /// Protocol feature and route discovery methods.
     public let capabilities: CapabilitiesNamespace
 
+    /// Output blank and resume methods.
+    public let output: OutputNamespace
+
     private let service: PatternSpaceService
     private let token: String?
     private let transport = WebSocketTransport()
@@ -73,6 +76,7 @@ public final class PatternSpaceClient: @unchecked Sendable {
         device = DeviceNamespace(session: session, transport: transport)
         display = DisplayNamespace(session: session, transport: transport)
         capabilities = CapabilitiesNamespace(session: session, transport: transport)
+        output = OutputNamespace(session: session, transport: transport)
 
         session.onNotification = { [weak self] method, params in
             self?.handleNotification(method: method, params: params)

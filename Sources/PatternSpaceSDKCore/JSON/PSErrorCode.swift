@@ -48,6 +48,9 @@ public enum PSErrorCode: Int, Sendable {
     /// Requested output color preset is not supported on this platform or display.
     case outputColorPresetUnsupported = -32012
 
+    /// Output blank failed, or the selected output state is unknown.
+    case outputNotConfirmed = -32013
+
     /// Default message paired with this error code.
     public var defaultMessage: String {
         switch self {
@@ -66,6 +69,7 @@ public enum PSErrorCode: Int, Sendable {
         case .notAuthorized: return "Not authorized"
         case .displaySelectionMismatch: return "Display selection mismatch"
         case .outputColorPresetUnsupported: return "Output color preset unsupported"
+        case .outputNotConfirmed: return "Output not confirmed"
         }
     }
 }

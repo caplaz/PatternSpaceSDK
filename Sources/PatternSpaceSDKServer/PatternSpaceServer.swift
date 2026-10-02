@@ -189,6 +189,9 @@ public final class PatternSpaceServer: @unchecked Sendable {
 private final class ClientConnection: @unchecked Sendable {
     private static let maxHTTPHeaderBytes = 16 * 1024
 
+    /// Server-minted identity forwarded with every request from this client.
+    let id = UUID()
+
     private let connection: NWConnection
     private let upgradeHandler: WebSocketUpgradeHandler
     private let dispatcher: JSONRPCDispatcher
@@ -311,7 +314,10 @@ private final class ClientConnection: @unchecked Sendable {
             }
 
             Task {
-                let response = await dispatcher.dispatch(frame.payload)
+                let response = await dispatcher.dispatch(
+                    frame.payload,
+                    context: OutputRequestContext(clientID: id)
+                )
                 send(WebSocketFrameCodec.encode(WebSocketFrame(opcode: .text, payload: response)))
             }
         case .ping:

@@ -18,6 +18,8 @@ enum JSONRPCRoute: String, CaseIterable {
     case displayGetOutputColorPreset = "display.getOutputColorPreset"
     case displaySetOutputColorPreset = "display.setOutputColorPreset"
     case displaySetMeasurementRange = "display.setMeasurementRange"
+    case outputBlank = "output.blank"
+    case outputResume = "output.resume"
 
     var namespace: String {
         rawValue.split(separator: ".", maxSplits: 1).map(String.init)[0]
@@ -50,7 +52,12 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
     }()
 
     /// Handles one raw JSON-RPC request payload and returns an encoded response.
-    public func dispatch(_ data: Data) async -> Data {
+    ///
+    /// - Parameters:
+    ///   - data: Raw request payload.
+    ///   - context: Server-generated identity of the sending client. Output
+    ///     writes forward it to the delegate; read handlers ignore it.
+    public func dispatch(_ data: Data, context: OutputRequestContext) async -> Data {
         // Stage 1: JSON syntax. Any failure → -32700, id is null per spec §5.
         guard let raw = try? JSONDecoder().decode(JSONValue.self, from: data) else {
             return errorResponseNullId(code: .parseError)
@@ -78,7 +85,7 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         }
         let params = obj["params"]
         do {
-            let result = try await route(method: method, params: params)
+            let result = try await route(method: method, params: params, context: context)
             return encode(JSONRPCSuccessResponse(id: id, result: result))
         } catch let e as PSDispatchError {
             return errorResponse(id: id, code: e.code, message: e.message, data: e.data)
@@ -97,16 +104,17 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
 
     // MARK: - Routing
 
-    private func route(method: String, params: JSONValue?) async throws -> JSONValue {
+    private func route(method: String, params: JSONValue?,
+                       context: OutputRequestContext) async throws -> JSONValue {
         guard let route = JSONRPCRoute(rawValue: method) else {
             throw PSDispatchError(.methodNotFound)
         }
         switch route {
         case .capabilitiesList: return try await handleCapabilities()
-        case .patternDisplay: return try await handleDisplay(params)
-        case .patternDisplayColor: return try await handleDisplayColor(params)
-        case .patternDisplayPatch: return try await handleDisplayPatch(params)
-        case .patternClear: return try await handleClear()
+        case .patternDisplay: return try await handleDisplay(params, context: context)
+        case .patternDisplayColor: return try await handleDisplayColor(params, context: context)
+        case .patternDisplayPatch: return try await handleDisplayPatch(params, context: context)
+        case .patternClear: return try await handleClear(context: context)
         case .patternList: return try await handleList(params)
         case .patternGet: return try await handleGet(params)
         case .deviceInfo: return try await handleDeviceInfo()
@@ -117,6 +125,8 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         case .displayGetOutputColorPreset: return try await handleGetOutputColorPreset(params)
         case .displaySetOutputColorPreset: return try await handleSetOutputColorPreset(params)
         case .displaySetMeasurementRange: return try await handleSetMeasurementRange(params)
+        case .outputBlank: return try await handleOutputBlank(params, context: context)
+        case .outputResume: return try await handleOutputResume(params, context: context)
         }
     }
 
@@ -126,17 +136,17 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         guard delegate?.isSourceActive == true else { throw PSDispatchError(.sourceNotActive) }
     }
 
-    private func handleDisplay(_ params: JSONValue?) async throws -> JSONValue {
+    private func handleDisplay(_ params: JSONValue?, context: OutputRequestContext) async throws -> JSONValue {
         guard let id = params?.object?["patternId"]?.string else {
             throw PSDispatchError(.invalidParams, message: "patternId (string) is required")
         }
         try InputValidator.validatePatternId(id)
         try requireSourceActive()
-        try await delegate?.displayPattern(id: id)
+        try await delegate?.displayPattern(id: id, context: context)
         return .object(["patternId": .string(id)])
     }
 
-    private func handleDisplayColor(_ params: JSONValue?) async throws -> JSONValue {
+    private func handleDisplayColor(_ params: JSONValue?, context: OutputRequestContext) async throws -> JSONValue {
         let obj = params?.object ?? [:]
         guard let r = obj["r"]?.number, let g = obj["g"]?.number, let b = obj["b"]?.number,
               let bdInt = obj["bitDepth"]?.int else {
@@ -153,14 +163,14 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
                 rectangles: [PatchRectangle(color: PSColor(r: r, g: g, b: b), rectangle: rect)],
                 bitDepth: bitDepth
             )
-            try await delegate?.displayPatch(patch)
+            try await delegate?.displayPatch(patch, context: context)
         } else {
-            try await delegate?.displayColor(PSColor(r: r, g: g, b: b), bitDepth: bitDepth)
+            try await delegate?.displayColor(PSColor(r: r, g: g, b: b), bitDepth: bitDepth, context: context)
         }
         return .object([:])
     }
 
-    private func handleDisplayPatch(_ params: JSONValue?) async throws -> JSONValue {
+    private func handleDisplayPatch(_ params: JSONValue?, context: OutputRequestContext) async throws -> JSONValue {
         let obj = params?.object ?? [:]
         guard let bg = obj["background"]?.object,
               let br = bg["r"]?.number, let bg_g = bg["g"]?.number, let bb = bg["b"]?.number,
@@ -195,14 +205,44 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
             background: PSColor(r: br, g: bg_g, b: bb),
             rectangles: rectangles,
             bitDepth: bitDepth
-        ))
+        ), context: context)
         return .object([:])
     }
 
-    private func handleClear() async throws -> JSONValue {
+    private func handleClear(context: OutputRequestContext) async throws -> JSONValue {
         try requireSourceActive()
-        try await delegate?.clearDisplay()
+        try await delegate?.clearDisplay(context: context)
         return .object([:])
+    }
+
+    // MARK: - Output handlers
+
+    /// Output methods take no params: accept absent, `{}` or `[]` only.
+    private func requireNoParams(_ params: JSONValue?) throws {
+        switch params {
+        case nil: return
+        case .object(let object) where object.isEmpty: return
+        case .array(let array) where array.isEmpty: return
+        default: throw PSDispatchError(.invalidParams, message: "params must be absent, {} or []")
+        }
+    }
+
+    private func handleOutputBlank(_ params: JSONValue?, context: OutputRequestContext) async throws -> JSONValue {
+        try requireNoParams(params)
+        try requireSourceActive()
+        guard let status = try await delegate?.blankOutput(context: context) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(status)
+    }
+
+    private func handleOutputResume(_ params: JSONValue?, context: OutputRequestContext) async throws -> JSONValue {
+        try requireNoParams(params)
+        try requireSourceActive()
+        guard let status = try await delegate?.resumeOutput(context: context) else {
+            throw PSDispatchError(.internalError)
+        }
+        return try encodeToJSONValue(status)
     }
 
     // MARK: - Read handlers

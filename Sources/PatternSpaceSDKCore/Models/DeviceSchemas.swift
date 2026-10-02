@@ -110,6 +110,9 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
     /// Normalized PQ/ST 2084 signal value where current EDR output clips.
     public let clipOnsetPQSignal: Double?
 
+    /// Output ownership and blank state; nil from hosts that do not report it.
+    public let output: OutputStatus?
+
     /// Creates a runtime status value.
     public init(currentPatternId: String?, sourceActive: Bool) {
         self.init(
@@ -133,7 +136,8 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
             referenceWhiteNits: nil,
             referenceWhiteNitsSource: nil,
             clipOnsetNits: nil,
-            clipOnsetPQSignal: nil
+            clipOnsetPQSignal: nil,
+            output: nil
         )
     }
 
@@ -159,7 +163,8 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         referenceWhiteNits: Double? = nil,
         referenceWhiteNitsSource: String? = nil,
         clipOnsetNits: Double? = nil,
-        clipOnsetPQSignal: Double? = nil
+        clipOnsetPQSignal: Double? = nil,
+        output: OutputStatus? = nil
     ) {
         self.currentPatternId = currentPatternId
         self.sourceActive = sourceActive
@@ -182,6 +187,7 @@ public struct DeviceStatus: Codable, Sendable, Equatable {
         self.referenceWhiteNitsSource = referenceWhiteNitsSource
         self.clipOnsetNits = clipOnsetNits
         self.clipOnsetPQSignal = clipOnsetPQSignal
+        self.output = output
     }
 }
 
@@ -214,14 +220,19 @@ public struct DeviceSnapshot: Codable, Sendable, Equatable {
     /// Whether the JSON protocol source is active in the app.
     public let sourceActive: Bool
 
+    /// Output ownership and blank state; nil from hosts that do not report it.
+    public let output: OutputStatus?
+
     /// Creates a full device state snapshot.
     public init(name: String, resolution: Resolution, colorFormat: String,
                 bitDepth: Int, hdrMode: String, refreshRate: Int, outputRange: String,
-                currentPatternId: String?, sourceActive: Bool) {
+                currentPatternId: String?, sourceActive: Bool,
+                output: OutputStatus? = nil) {
         self.name = name; self.resolution = resolution; self.colorFormat = colorFormat
         self.bitDepth = bitDepth; self.hdrMode = hdrMode; self.refreshRate = refreshRate
         self.outputRange = outputRange; self.currentPatternId = currentPatternId
         self.sourceActive = sourceActive
+        self.output = output
     }
 }
 
@@ -260,15 +271,20 @@ public struct ConnectionReadyParams: Codable, Sendable {
     /// Whether the WebSocket connection satisfied server authentication.
     public let authenticated: Bool
 
+    /// Output ownership and blank state; nil from hosts that do not report it.
+    public let output: OutputStatus?
+
     /// Creates connection-ready notification parameters.
     public init(protocolVersion: String, name: String, resolution: Resolution,
                 colorFormat: String, bitDepth: Int, hdrMode: String,
                 refreshRate: Int, outputRange: String, currentPatternId: String?,
-                sourceActive: Bool, authenticated: Bool) {
+                sourceActive: Bool, authenticated: Bool,
+                output: OutputStatus? = nil) {
         self.protocolVersion = protocolVersion; self.name = name; self.resolution = resolution
         self.colorFormat = colorFormat; self.bitDepth = bitDepth; self.hdrMode = hdrMode
         self.refreshRate = refreshRate; self.outputRange = outputRange
         self.currentPatternId = currentPatternId; self.sourceActive = sourceActive
         self.authenticated = authenticated
+        self.output = output
     }
 }

@@ -55,6 +55,9 @@ public struct CapabilitiesResult: Codable, Sendable, Equatable {
     public let namespaces: [String: [String]]
     public let features: CapabilityFeatures
 
+    /// Whether the host supports `output.blank` / `output.resume`; nil from older hosts.
+    public let outputBlank: Bool?
+
     public init(
         protocolVersion: String,
         app: AppMetadata,
@@ -62,7 +65,8 @@ public struct CapabilitiesResult: Codable, Sendable, Equatable {
         platform: PlatformName,
         authRequired: Bool,
         namespaces: [String: [String]],
-        features: CapabilityFeatures
+        features: CapabilityFeatures,
+        outputBlank: Bool? = nil
     ) {
         self.protocolVersion = protocolVersion
         self.app = app
@@ -71,5 +75,6 @@ public struct CapabilitiesResult: Codable, Sendable, Equatable {
         self.authRequired = authRequired
         self.namespaces = namespaces
         self.features = features
+        self.outputBlank = outputBlank
     }
 }

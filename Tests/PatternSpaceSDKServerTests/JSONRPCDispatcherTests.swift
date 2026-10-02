@@ -17,15 +17,58 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
     var clearCalled = false
     var shouldThrowNotFound = false
 
-    func displayPattern(id: String) async throws {
+    var outputStatus = OutputStatus(
+        owner: .jsonClient, ownerConnected: true, blankRequester: .jsonClient,
+        blanked: .remote, blankPending: false, failure: nil, idleBlankSeconds: nil,
+        epoch: "6F9619FF-8B86-D011-B42D-00C04FC964FF", revision: 5
+    )
+    var outputError: PSDispatchError?
+
+    // Request contexts received by each output-write method, in call order.
+    private let contextLock = NSLock()
+    private var recordedContexts: [String: [OutputRequestContext]] = [:]
+    private func record(_ method: String, _ context: OutputRequestContext) {
+        contextLock.lock(); defer { contextLock.unlock() }
+        recordedContexts[method, default: []].append(context)
+    }
+    private func contexts(_ method: String) -> [OutputRequestContext] {
+        contextLock.lock(); defer { contextLock.unlock() }
+        return recordedContexts[method] ?? []
+    }
+    var patternContexts: [OutputRequestContext] { contexts("pattern") }
+    var colorContexts: [OutputRequestContext] { contexts("color") }
+    var patchContexts: [OutputRequestContext] { contexts("patch") }
+    var clearContexts: [OutputRequestContext] { contexts("clear") }
+    var blankContexts: [OutputRequestContext] { contexts("blank") }
+    var resumeContexts: [OutputRequestContext] { contexts("resume") }
+
+    func displayPattern(id: String, context: OutputRequestContext) async throws {
+        record("pattern", context)
         if shouldThrowNotFound { throw PSDispatchError(.patternNotFound) }
         displayedPatternId = id
     }
-    func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws {
+    func displayColor(_ color: PSColor, bitDepth: BitDepth, context: OutputRequestContext) async throws {
+        record("color", context)
         displayedColor = color; displayedBitDepth = bitDepth
     }
-    func displayPatch(_ params: PatchParams) async throws { displayedPatch = params }
-    func clearDisplay() async throws { clearCalled = true }
+    func displayPatch(_ params: PatchParams, context: OutputRequestContext) async throws {
+        record("patch", context)
+        displayedPatch = params
+    }
+    func clearDisplay(context: OutputRequestContext) async throws {
+        record("clear", context)
+        clearCalled = true
+    }
+    func blankOutput(context: OutputRequestContext) async throws -> OutputStatus {
+        record("blank", context)
+        if let outputError { throw outputError }
+        return outputStatus
+    }
+    func resumeOutput(context: OutputRequestContext) async throws -> OutputStatus {
+        record("resume", context)
+        if let outputError { throw outputError }
+        return outputStatus
+    }
     func listPatterns(category: String?, subcategory: String?) async throws -> [PatternInfo] {
         [PatternInfo(id: "Color-One-Red", name: "Red", category: "Color", subcategory: "Solid")]
     }
@@ -230,6 +273,8 @@ final class MockDelegate: PatternSpaceServerDelegate, @unchecked Sendable {
 
 // MARK: - Helpers
 
+let testContext = OutputRequestContext(clientID: UUID())
+
 func request(method: String, params: String = "{}") -> Data {
     Data(#"{"jsonrpc":"2.0","id":"1","method":"\#(method)","params":\#(params)}"#.utf8)
 }
@@ -245,7 +290,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.display",
-                                            params: #"{"patternId":"Color-One-Red"}"#))
+                                            params: #"{"patternId":"Color-One-Red"}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["result"] != nil)
         #expect(mock.displayedPatternId == "Color-One-Red")
@@ -255,7 +300,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         mock.isSourceActive = false
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.display",
-                                            params: #"{"patternId":"Color-One-Red"}"#))
+                                            params: #"{"patternId":"Color-One-Red"}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32005))
     }
@@ -263,7 +308,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.displayColor",
-                                            params: #"{"r":2.0,"g":0.0,"b":0.0,"bitDepth":10}"#))
+                                            params: #"{"r":2.0,"g":0.0,"b":0.0,"bitDepth":10}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
     }
@@ -271,7 +316,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.displayColor",
-                                            params: #"{"r":1.0,"g":0.0,"b":0.0,"bitDepth":10,"size":10}"#))
+                                            params: #"{"r":1.0,"g":0.0,"b":0.0,"bitDepth":10,"size":10}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["result"] != nil)
         let patch = try #require(mock.displayedPatch)
@@ -294,7 +339,7 @@ func responseObject(from data: Data) throws -> JSONValue {
           ],
           "bitDepth":10
         }
-        """))
+        """), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["result"] != nil)
         let patch = try #require(mock.displayedPatch)
@@ -307,7 +352,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.displayPatch", params: """
         {"background":{"r":0.0,"g":0.0,"b":0.0},"rectangles":[],"bitDepth":10}
-        """))
+        """), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
     }
@@ -315,28 +360,28 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.displayRectangle",
-                                            params: #"{"foreground":{"r":1,"g":1,"b":1},"background":{"r":0,"g":0,"b":0},"x":0,"y":0,"width":1,"height":1,"bitDepth":10}"#))
+                                            params: #"{"foreground":{"r":1,"g":1,"b":1},"background":{"r":0,"g":0,"b":0},"x":0,"y":0,"width":1,"height":1,"bitDepth":10}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
     @Test func unknownMethodReturnsMethodNotFound() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(request(method: "nonexistent.method"))
+        let resp = await d.dispatch(request(method: "nonexistent.method"), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
     @Test func rpcNamespaceReturnsMethodNotFound() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(request(method: "rpc.discover"))
+        let resp = await d.dispatch(request(method: "rpc.discover"), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
     @Test func invalidJSONReturnsParseError() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(Data("not json".utf8))
+        let resp = await d.dispatch(Data("not json".utf8), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32700))
         #expect(obj.object?["id"] == .null)
@@ -344,7 +389,7 @@ func responseObject(from data: Data) throws -> JSONValue {
     @Test func batchRequestReturnsInvalidRequest() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(Data("[{}]".utf8))
+        let resp = await d.dispatch(Data("[{}]".utf8), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32600))
         #expect(obj.object?["id"] == .null)
@@ -352,7 +397,7 @@ func responseObject(from data: Data) throws -> JSONValue {
     @Test func missingIdReturnsInvalidRequest() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(Data(#"{"jsonrpc":"2.0","method":"pattern.clear","params":{}}"#.utf8))
+        let resp = await d.dispatch(Data(#"{"jsonrpc":"2.0","method":"pattern.clear","params":{}}"#.utf8), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32600))
         #expect(obj.object?["id"] == .null)
@@ -360,14 +405,14 @@ func responseObject(from data: Data) throws -> JSONValue {
     @Test func nullIdReturnsInvalidRequest() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(Data(#"{"jsonrpc":"2.0","id":null,"method":"pattern.clear","params":{}}"#.utf8))
+        let resp = await d.dispatch(Data(#"{"jsonrpc":"2.0","id":null,"method":"pattern.clear","params":{}}"#.utf8), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32600))
     }
     @Test func wrongJsonrpcVersionReturnsInvalidRequest() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(Data(#"{"jsonrpc":"1.0","id":"1","method":"device.info","params":{}}"#.utf8))
+        let resp = await d.dispatch(Data(#"{"jsonrpc":"1.0","id":"1","method":"device.info","params":{}}"#.utf8), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32600))
     }
@@ -375,7 +420,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         mock.isSourceActive = false
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(request(method: "pattern.list", params: "{}"))
+        let resp = await d.dispatch(request(method: "pattern.list", params: "{}"), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["result"] != nil)
     }
@@ -383,14 +428,14 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         mock.isSourceActive = false
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(request(method: "device.info", params: "{}"))
+        let resp = await d.dispatch(request(method: "device.info", params: "{}"), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["result"]?.object?["name"] == .string("Test"))
     }
     @Test func clearCallsDelegate() async throws {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
-        let resp = await d.dispatch(request(method: "pattern.clear", params: "{}"))
+        let resp = await d.dispatch(request(method: "pattern.clear", params: "{}"), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["result"] != nil)
         #expect(mock.clearCalled)
@@ -399,7 +444,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
         let resp = await d.dispatch(request(method: "pattern.get",
-                                            params: #"{"patternId":"unknown"}"#))
+                                            params: #"{"patternId":"unknown"}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32002))
     }
@@ -411,7 +456,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         mock.isSourceActive = false
         let d = JSONRPCDispatcher(delegate: mock)
 
-        let resp = await d.dispatch(request(method: "display.list", params: "{}"))
+        let resp = await d.dispatch(request(method: "display.list", params: "{}"), context: testContext)
         let obj = try responseObject(from: resp)
 
         #expect(obj.object?["result"]?.object?["platform"] == .string("macOS"))
@@ -424,7 +469,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
 
         let resp = await d.dispatch(request(method: "display.setPeakWhite",
-                                            params: #"{"displayId":"69734272","peakWhite":3.0}"#))
+                                            params: #"{"displayId":"69734272","peakWhite":3.0}"#), context: testContext)
         let obj = try responseObject(from: resp)
 
         #expect(obj.object?["result"]?.object?["id"] == .string("69734272"))
@@ -437,7 +482,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
 
         let resp = await d.dispatch(request(method: "display.setPeakWhite",
-                                            params: #"{"peakWhite":3.0}"#))
+                                            params: #"{"peakWhite":3.0}"#), context: testContext)
         let obj = try responseObject(from: resp)
 
         #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
@@ -448,7 +493,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
 
         let resp = await d.dispatch(request(method: "display.setPeakWhite",
-                                            params: #"{"displayId":"69734272","peakWhite":"NaN"}"#))
+                                            params: #"{"displayId":"69734272","peakWhite":"NaN"}"#), context: testContext)
         let obj = try responseObject(from: resp)
 
         #expect(obj.object?["error"]?.object?["code"] == .int(-32602))
@@ -459,7 +504,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
 
         let resp = await d.dispatch(request(method: "display.setPeakWhite",
-                                            params: #"{"displayId":"69734272","peakWhite":12.0}"#))
+                                            params: #"{"displayId":"69734272","peakWhite":12.0}"#), context: testContext)
         let obj = try responseObject(from: resp)
         let error = try #require(obj.object?["error"]?.object)
         let data = try #require(error["data"]?.object)
@@ -475,7 +520,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let mock = MockDelegate()
         let d = JSONRPCDispatcher(delegate: mock)
 
-        let resp = await d.dispatch(request(method: "capabilities.list", params: "{}"))
+        let resp = await d.dispatch(request(method: "capabilities.list", params: "{}"), context: testContext)
         let obj = try responseObject(from: resp)
         let result = try #require(obj.object?["result"]?.object)
 
@@ -489,7 +534,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
 
         let resp = await d.dispatch(request(method: "display.listColorManagementModes",
-                                            params: #"{"displayId":"69734272"}"#))
+                                            params: #"{"displayId":"69734272"}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
@@ -500,7 +545,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let d = JSONRPCDispatcher(delegate: mock)
 
         let resp = await d.dispatch(request(method: "display.setColorManagementMode",
-                                            params: #"{"displayId":"69734272","mode":"managedDisplayP3"}"#))
+                                            params: #"{"displayId":"69734272","mode":"managedDisplayP3"}"#), context: testContext)
         let obj = try responseObject(from: resp)
         #expect(obj.object?["error"]?.object?["code"] == .int(-32601))
     }
@@ -520,7 +565,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(
             method: "display.listOutputColorPresets",
             params: #"{"displayId":"69734272"}"#
-        ))
+        ), context: testContext)
         let obj = try responseObject(from: resp)
         let result = try #require(obj.object?["result"]?.object)
 
@@ -537,7 +582,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(
             method: "display.getOutputColorPreset",
             params: #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
-        ))
+        ), context: testContext)
         let obj = try responseObject(from: resp)
         let result = try #require(obj.object?["result"]?.object)
         let preset = try #require(result["preset"]?.object)
@@ -573,7 +618,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(
             method: "display.getOutputColorPreset",
             params: #"{"displayId":"69734272","presetId":"hdrBT2020PQ"}"#
-        ))
+        ), context: testContext)
         let obj = try responseObject(from: resp)
         let preset = try #require(obj.object?["result"]?.object?["preset"]?.object)
 
@@ -591,7 +636,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(
             method: "display.getOutputColorPreset",
             params: #"{"displayId":"69734272","presetId":"vendor.unknown"}"#
-        ))
+        ), context: testContext)
         let obj = try responseObject(from: resp)
         let error = try #require(obj.object?["error"]?.object)
         let data = try #require(error["data"]?.object)
@@ -608,7 +653,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(
             method: "display.setOutputColorPreset",
             params: #"{"displayId":"69734272","presetId":"vendor.future"}"#
-        ))
+        ), context: testContext)
         let obj = try responseObject(from: resp)
 
         #expect(obj.object?["result"] != nil)
@@ -622,7 +667,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         let resp = await d.dispatch(request(
             method: "display.setMeasurementRange",
             params: #"{"displayId":"69734272","measurementRange":"vendor.future"}"#
-        ))
+        ), context: testContext)
         let obj = try responseObject(from: resp)
 
         #expect(obj.object?["result"]?.object?["selectedMeasurementRange"] == .string("vendor.future"))
@@ -636,11 +681,11 @@ func responseObject(from data: Data) throws -> JSONValue {
         let missingDisplay = await d.dispatch(request(
             method: "display.setMeasurementRange",
             params: #"{"measurementRange":"legal"}"#
-        ))
+        ), context: testContext)
         let missingRange = await d.dispatch(request(
             method: "display.setMeasurementRange",
             params: #"{"displayId":"69734272"}"#
-        ))
+        ), context: testContext)
 
         #expect(try responseObject(from: missingDisplay).object?["error"]?.object?["code"] == .int(-32602))
         #expect(try responseObject(from: missingRange).object?["error"]?.object?["code"] == .int(-32602))
@@ -650,7 +695,7 @@ func responseObject(from data: Data) throws -> JSONValue {
         for method in JSONRPCRoute.allCases.map(\.rawValue) {
             let mock = MockDelegate()
             let d = JSONRPCDispatcher(delegate: mock)
-            let resp = await d.dispatch(request(method: method, params: params(for: method)))
+            let resp = await d.dispatch(request(method: method, params: params(for: method)), context: testContext)
             let obj = try responseObject(from: resp)
 
             #expect(obj.object?["error"]?.object?["code"] != .int(-32601))
