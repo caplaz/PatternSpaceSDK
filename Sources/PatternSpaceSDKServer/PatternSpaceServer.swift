@@ -2,6 +2,16 @@ import Foundation
 import Network
 import PatternSpaceSDKCore
 
+/// Why a registered client's lifecycle ended.
+public enum ClientDisconnectReason: Sendable, Equatable {
+    /// The client's socket closed (client disconnect, network failure, or protocol error).
+    case closed
+    /// A newer client connected and replaced this one.
+    case evicted
+    /// `PatternSpaceServer.stop()` closed the client.
+    case serverStopped
+}
+
 /// WebSocket JSON-RPC server for embedding PatternSpace protocol support.
 ///
 /// The server advertises itself with Bonjour, accepts WebSocket connections
@@ -14,12 +24,31 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private let dispatcher: JSONRPCDispatcher
     private let buildConnectionReady: (Bool) -> ConnectionReadyParams
     private var listener: NWListener?
-    private var clients: [ObjectIdentifier: ClientConnection] = [:]
-    private var pendingClients: [ObjectIdentifier: ClientConnection] = [:]
+    /// Every accepted socket, retained until its close is observed. Pending,
+    /// registered and evicted-but-not-yet-closed connections all live here;
+    /// `ClientConnection.lifecycle` distinguishes them.
+    private var connections: [ObjectIdentifier: ClientConnection] = [:]
+    /// Guards `connections` and each connection's `lifecycle`.
     private let lock = NSLock()
+    /// Serializes every lifecycle transition together with its callbacks, so
+    /// callbacks are delivered in exactly the order the transitions happened.
+    private let lifecycleQueue = DispatchQueue(label: "PatternSpaceServer.lifecycle")
+    private let lifecycleQueueKey = DispatchSpecificKey<Void>()
 
-    /// Called on a background queue when the last active (upgraded) client disconnects.
-    public var onClientDisconnected: (() -> Void)?
+    /// Called once for each authenticated client when it becomes the active
+    /// client, with the server-minted identity carried by all of its requests.
+    ///
+    /// Callbacks run serially on an internal queue, in lifecycle order: when a
+    /// new client replaces an existing one, the old client's
+    /// `onClientDisconnected(_, .evicted)` is delivered before this callback.
+    /// Keep callbacks short and non-blocking (hop to your own actor/queue);
+    /// `stop()` waits for in-progress callbacks to finish.
+    public var onClientConnected: ((UUID) -> Void)?
+
+    /// Called exactly once for each client previously reported to
+    /// `onClientConnected`, with the reason its lifecycle ended. Rejected
+    /// (unauthenticated) sockets never produce either callback.
+    public var onClientDisconnected: ((UUID, ClientDisconnectReason) -> Void)?
 
     /// Creates a PatternSpace protocol server.
     ///
@@ -35,6 +64,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
         self.upgradeHandler = WebSocketUpgradeHandler(token: token)
         self.dispatcher = JSONRPCDispatcher(delegate: delegate)
         self.buildConnectionReady = connectionReady
+        lifecycleQueue.setSpecific(key: lifecycleQueueKey, value: ())
     }
 
     /// Starts listening for WebSocket clients and advertising over Bonjour.
@@ -61,13 +91,17 @@ public final class PatternSpaceServer: @unchecked Sendable {
         listener?.cancel()
         listener = nil
 
-        lock.lock()
-        let snapshot = Array(clients.values) + Array(pendingClients.values)
-        clients.removeAll()
-        pendingClients.removeAll()
-        lock.unlock()
+        onLifecycleQueue {
+            lock.lock()
+            let snapshot = Array(connections.values)
+            connections.removeAll()
+            let stopped = snapshot.filter { $0.lifecycle == .registered }
+            stopped.forEach { $0.lifecycle = .disconnectNotified }
+            lock.unlock()
 
-        snapshot.forEach { $0.close() }
+            stopped.forEach { onClientDisconnected?($0.id, .serverStopped) }
+            snapshot.forEach { $0.close() }
+        }
     }
 
     /// Broadcasts a server notification to connected clients.
@@ -76,7 +110,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
         let frame = WebSocketFrameCodec.encode(WebSocketFrame(opcode: .text, payload: data))
 
         lock.lock()
-        let snapshot = Array(clients.values)
+        let snapshot = connections.values.filter { $0.lifecycle == .registered }
         lock.unlock()
 
         snapshot.forEach { $0.send(frame) }
@@ -93,8 +127,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
             },
             onUpgraded: { [weak self] client in
                 guard let self else { return }
-                let evicted = self.registerAndEvictExisting(client)
-                evicted.forEach { $0.close() }
+                self.registerAndEvictExisting(client)
                 let params = self.buildConnectionReady(authenticated)
                 self.sendConnectionReady(params, to: client)
             },
@@ -108,32 +141,59 @@ public final class PatternSpaceServer: @unchecked Sendable {
         // returns, so it deallocates before the WebSocket upgrade is processed
         // and the server never responds to the handshake.
         lock.lock()
-        pendingClients[ObjectIdentifier(client)] = client
+        connections[ObjectIdentifier(client)] = client
         lock.unlock()
 
         client.start()
     }
 
-    private func registerAndEvictExisting(_ client: ClientConnection) -> [ClientConnection] {
-        lock.lock()
-        let newID = ObjectIdentifier(client)
-        pendingClients.removeValue(forKey: newID)
-        let evicted = clients.filter { $0.key != newID }.map(\.value)
-        clients = [newID: client]
-        lock.unlock()
-        return evicted
+    /// Replaces the active client in one serialized lifecycle operation:
+    /// evicted clients are notified (and marked notified) first, then the new
+    /// client is registered and announced, and only then are old sockets closed,
+    /// so their late `remove` cannot notify a second time.
+    private func registerAndEvictExisting(_ client: ClientConnection) {
+        onLifecycleQueue {
+            lock.lock()
+            guard client.lifecycle == .pending,
+                  connections[ObjectIdentifier(client)] != nil else {
+                // Closed or stopped before the upgrade was registered.
+                lock.unlock()
+                return
+            }
+            let evicted = connections.values.filter { $0.lifecycle == .registered }
+            evicted.forEach { $0.lifecycle = .disconnectNotified }
+            lock.unlock()
+
+            evicted.forEach { onClientDisconnected?($0.id, .evicted) }
+
+            lock.lock()
+            client.lifecycle = .registered
+            lock.unlock()
+            onClientConnected?(client.id)
+
+            evicted.forEach { $0.close() }
+        }
     }
 
     private func remove(_ client: ClientConnection) {
-        lock.lock()
-        let id = ObjectIdentifier(client)
-        let wasActive = clients.removeValue(forKey: id) != nil
-        pendingClients.removeValue(forKey: id)
-        let noMoreActive = clients.isEmpty
-        lock.unlock()
+        onLifecycleQueue {
+            lock.lock()
+            connections.removeValue(forKey: ObjectIdentifier(client))
+            let notify = client.lifecycle == .registered
+            if notify { client.lifecycle = .disconnectNotified }
+            lock.unlock()
 
-        if wasActive && noMoreActive {
-            onClientDisconnected?()
+            if notify { onClientDisconnected?(client.id, .closed) }
+        }
+    }
+
+    /// Runs `work` synchronously on the lifecycle queue, inline when already on
+    /// it (e.g. a lifecycle callback that calls `stop()`).
+    private func onLifecycleQueue(_ work: () -> Void) {
+        if DispatchQueue.getSpecific(key: lifecycleQueueKey) != nil {
+            work()
+        } else {
+            lifecycleQueue.sync(execute: work)
         }
     }
 
@@ -171,6 +231,14 @@ public final class PatternSpaceServer: @unchecked Sendable {
     }
 
     #if DEBUG
+    /// Test-only count of sockets the server still tracks (pending, active, or
+    /// evicted but not yet observed closed).
+    public func openConnectionCountForTest() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return connections.count
+    }
+
     /// Test-only helper that encodes an event as a JSON-RPC notification payload.
     public func encodedEventForTest(_ event: PatternSpaceEvent) throws -> Data {
         guard let data = encodeEvent(event) else {
@@ -189,8 +257,20 @@ public final class PatternSpaceServer: @unchecked Sendable {
 private final class ClientConnection: @unchecked Sendable {
     private static let maxHTTPHeaderBytes = 16 * 1024
 
+    enum Lifecycle {
+        /// Accepted but not (yet) an authenticated, registered client.
+        case pending
+        /// Reported to `onClientConnected`; disconnect not yet reported.
+        case registered
+        /// `onClientDisconnected` has been delivered for this client.
+        case disconnectNotified
+    }
+
     /// Server-minted identity forwarded with every request from this client.
     let id = UUID()
+
+    /// Guarded by the owning server's lock; transitions only on its lifecycle queue.
+    var lifecycle: Lifecycle = .pending
 
     private let connection: NWConnection
     private let upgradeHandler: WebSocketUpgradeHandler
@@ -313,11 +393,13 @@ private final class ClientConnection: @unchecked Sendable {
                 return
             }
 
+            // Bind the identity before spawning async work so in-flight requests
+            // keep the original client ID even after this client is replaced.
+            let context = OutputRequestContext(clientID: id)
+            let payload = frame.payload
+            let dispatcher = dispatcher
             Task {
-                let response = await dispatcher.dispatch(
-                    frame.payload,
-                    context: OutputRequestContext(clientID: id)
-                )
+                let response = await dispatcher.dispatch(payload, context: context)
                 send(WebSocketFrameCodec.encode(WebSocketFrame(opcode: .text, payload: response)))
             }
         case .ping:

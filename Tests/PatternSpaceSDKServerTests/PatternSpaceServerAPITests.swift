@@ -25,6 +25,37 @@ import PatternSpaceSDKCore
         withExtendedLifetime(server) {}
     }
 
+    @Test func lifecycleCallbacksCarryClientIdentityAndReason() {
+        let delegate = MockDelegate()
+        let server = PatternSpaceServer(token: nil, delegate: delegate) { authenticated in
+            ConnectionReadyParams(
+                protocolVersion: "1.0",
+                name: "PS",
+                resolution: Resolution(width: 3840, height: 2160),
+                colorFormat: "RGB",
+                bitDepth: 10,
+                hdrMode: "SDR",
+                refreshRate: 60,
+                outputRange: "full",
+                currentPatternId: nil,
+                sourceActive: true,
+                authenticated: authenticated
+            )
+        }
+        let connected: @Sendable (UUID) -> Void = { _ in Issue.record("no client connected") }
+        let disconnected: @Sendable (UUID, ClientDisconnectReason) -> Void = { _, _ in
+            Issue.record("no client disconnected")
+        }
+        server.onClientConnected = connected
+        server.onClientDisconnected = disconnected
+
+        // Stopping a server with no registered clients notifies nothing.
+        server.stop()
+
+        let reasons: [ClientDisconnectReason] = [.closed, .evicted, .serverStopped]
+        #expect(reasons.map { "\($0)" } == ["closed", "evicted", "serverStopped"])
+    }
+
     @Test func serviceTXTRecordReportsProtocolAndAuthRequirement() {
         let delegate = MockDelegate()
         let server = PatternSpaceServer(token: "test-token", delegate: delegate) { authenticated in

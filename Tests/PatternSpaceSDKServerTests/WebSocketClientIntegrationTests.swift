@@ -86,6 +86,120 @@ import PatternSpaceSDKCore
         #expect(delegate.blankContexts.isEmpty)
     }
 
+    @Test func evictionAndShutdownNotifyEachClientExactlyOnceInOrder() async throws {
+        let port: UInt16 = 18_790
+        let server = makeServer(delegate: MockDelegate())
+        let recorder = LifecycleRecorder(server)
+        try server.start(port: port, deviceName: "PatternSpaceSDK lifecycle test")
+        defer { server.stop() }
+
+        let clientA = makeClient(port: port, token: "test-token")
+        clientA.connect()
+        defer { clientA.disconnect() }
+        try await poll { recorder.events == ["connected:A"] }
+
+        let clientB = makeClient(port: port, token: "test-token")
+        clientB.connect()
+        defer { clientB.disconnect() }
+        try await poll { recorder.events.count == 3 }
+
+        // A's socket closes only after B is registered; that late close must
+        // not produce a second disconnect for A (nor suppress B's lifecycle).
+        clientA.disconnect()
+        try await poll { server.openConnectionCountForTest() == 1 }
+
+        server.stop()
+        #expect(recorder.events == [
+            "connected:A", "disconnected:A:evicted",
+            "connected:B", "disconnected:B:serverStopped"
+        ])
+    }
+
+    @Test func ordinaryCloseAfterEvictionNotifiesClosed() async throws {
+        let port: UInt16 = 18_791
+        let server = makeServer(delegate: MockDelegate())
+        let recorder = LifecycleRecorder(server)
+        try server.start(port: port, deviceName: "PatternSpaceSDK close test")
+        defer { server.stop() }
+
+        let clientA = makeClient(port: port, token: "test-token")
+        clientA.connect()
+        defer { clientA.disconnect() }
+        try await poll { recorder.events == ["connected:A"] }
+
+        let clientB = makeClient(port: port, token: "test-token")
+        clientB.connect()
+        try await poll { recorder.events.count == 3 }
+
+        clientB.disconnect()
+        try await poll { recorder.events.count == 4 }
+        clientA.disconnect()
+        try await poll { server.openConnectionCountForTest() == 0 }
+
+        #expect(recorder.events == [
+            "connected:A", "disconnected:A:evicted",
+            "connected:B", "disconnected:B:closed"
+        ])
+    }
+
+    @Test func ordinaryCloseNotifiesClosedWhileOtherSocketsRemainOpen() async throws {
+        let port: UInt16 = 18_792
+        let server = makeServer(delegate: MockDelegate())
+        let recorder = LifecycleRecorder(server)
+        try server.start(port: port, deviceName: "PatternSpaceSDK close-with-others test")
+        defer { server.stop() }
+
+        let clientA = makeClient(port: port, token: "test-token")
+        clientA.connect()
+        try await poll { recorder.events == ["connected:A"] }
+
+        // A second socket that is still open (never registered) must not
+        // suppress A's disconnect notification.
+        let other = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+        other.start(queue: .global())
+        defer { other.cancel() }
+        try await poll { server.openConnectionCountForTest() == 2 }
+
+        clientA.disconnect()
+        try await poll { recorder.events.count == 2 }
+        #expect(recorder.events == ["connected:A", "disconnected:A:closed"])
+        #expect(server.openConnectionCountForTest() == 1)
+    }
+
+    @Test func unauthenticatedRejectionProducesNoLifecycleCallbacks() async throws {
+        let port: UInt16 = 18_793
+        let server = makeServer(delegate: MockDelegate())
+        let recorder = LifecycleRecorder(server)
+        try server.start(port: port, deviceName: "PatternSpaceSDK rejection test")
+        defer { server.stop() }
+
+        let client = makeClient(port: port, token: "wrong-token")
+        client.connect()
+        await #expect(throws: (any Error).self) {
+            _ = try await withinTwoSeconds(client) { try await client.device.status() }
+        }
+        client.disconnect()
+        try await poll { server.openConnectionCountForTest() == 0 }
+        server.stop()
+
+        #expect(recorder.events.isEmpty)
+    }
+
+    /// Polls `condition` every 10 ms until it holds, failing after 3 seconds.
+    private func poll(
+        _ condition: @escaping @Sendable () -> Bool,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("condition not met within 3 seconds", sourceLocation: sourceLocation)
+                throw WebSocketClientTestError.timedOut
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     private func makeServer(delegate: MockDelegate) -> PatternSpaceServer {
         PatternSpaceServer(token: "test-token", delegate: delegate) { authenticated in
             ConnectionReadyParams(
@@ -144,4 +258,39 @@ import PatternSpaceSDKCore
 
 private enum WebSocketClientTestError: Error {
     case timedOut
+}
+
+/// Records server lifecycle callbacks, mapping each real client UUID to a
+/// deterministic label ("A", "B", ...) in order of first appearance.
+private final class LifecycleRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var labels: [UUID: String] = [:]
+    private var recorded: [String] = []
+
+    init(_ server: PatternSpaceServer) {
+        server.onClientConnected = { [self] id in
+            append { "connected:\(label(for: id))" }
+        }
+        server.onClientDisconnected = { [self] id, reason in
+            append { "disconnected:\(label(for: id)):\(reason)" }
+        }
+    }
+
+    var events: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return recorded
+    }
+
+    private func append(_ makeEvent: () -> String) {
+        lock.lock(); defer { lock.unlock() }
+        recorded.append(makeEvent())
+    }
+
+    /// Must be called with `lock` held.
+    private func label(for id: UUID) -> String {
+        if let label = labels[id] { return label }
+        let label = String(UnicodeScalar(UInt8(65 + labels.count)))
+        labels[id] = label
+        return label
+    }
 }
