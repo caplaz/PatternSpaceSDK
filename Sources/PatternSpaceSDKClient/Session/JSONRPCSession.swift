@@ -2,7 +2,14 @@ import Foundation
 import PatternSpaceSDKCore
 
 final class JSONRPCSession: @unchecked Sendable {
-    private var pending: [String: CheckedContinuation<JSONValue, Error>] = [:]
+    /// A request awaiting its response. `generation` is the transport socket
+    /// generation it was written to; nil until the transport accepts it.
+    private struct Pending {
+        let continuation: CheckedContinuation<JSONValue, Error>
+        var generation: UInt64?
+    }
+
+    private var pending: [String: Pending] = [:]
     private let lock = NSLock()
     var onNotification: ((String, JSONValue?) -> Void)?
 
@@ -13,9 +20,22 @@ final class JSONRPCSession: @unchecked Sendable {
 
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
-            pending[id] = continuation
+            pending[id] = Pending(continuation: continuation)
             lock.unlock()
-            transport.send(data)
+            // Runs on the transport queue, before the write and before any
+            // response or disconnect of that generation can be delivered.
+            transport.send(data) { [weak self] generation in
+                guard let self else { return }
+                self.lock.lock()
+                guard let generation else {
+                    let rejected = self.pending.removeValue(forKey: id)
+                    self.lock.unlock()
+                    rejected?.continuation.resume(throwing: PatternSpaceClientError.disconnected)
+                    return
+                }
+                self.pending[id]?.generation = generation
+                self.lock.unlock()
+            }
         }
     }
 
@@ -30,7 +50,7 @@ final class JSONRPCSession: @unchecked Sendable {
 
         guard let id = object["id"]?.string else { return }
         lock.lock()
-        let continuation = pending.removeValue(forKey: id)
+        let continuation = pending.removeValue(forKey: id)?.continuation
         lock.unlock()
 
         if let result = object["result"] {
@@ -43,12 +63,14 @@ final class JSONRPCSession: @unchecked Sendable {
         }
     }
 
-    func failAllPending(with error: Error) {
+    /// Fails only the requests written to socket `generation`; requests of
+    /// other generations, or not yet accepted by the transport, are untouched.
+    func failPending(generation: UInt64, with error: Error) {
         lock.lock()
-        let snapshot = pending
-        pending.removeAll()
+        let ids = pending.filter { $0.value.generation == generation }.map(\.key)
+        let failed = ids.compactMap { pending.removeValue(forKey: $0)?.continuation }
         lock.unlock()
-        snapshot.values.forEach { $0.resume(throwing: error) }
+        failed.forEach { $0.resume(throwing: error) }
     }
 }
 

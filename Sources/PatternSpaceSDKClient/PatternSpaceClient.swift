@@ -56,19 +56,32 @@ public final class PatternSpaceClient: @unchecked Sendable {
 
     private let service: PatternSpaceService
     private let token: String?
-    private let transport = WebSocketTransport()
+    private let transport: WebSocketTransport
     private let session = JSONRPCSession()
     private let eventStream: AsyncStream<PatternSpaceEvent>
     private let eventContinuation: AsyncStream<PatternSpaceEvent>.Continuation
+    private let initialReconnectDelay: TimeInterval
+    // Guarded by `lifecycleLock`. `lifecycleGeneration` advances on every
+    // connect, automatic reconnect and disconnect; it tags each transport
+    // socket and fences scheduled reconnects against later lifecycle calls.
+    private let lifecycleLock = NSLock()
     private var intentionallyDisconnected = false
-    private var reconnectDelay: TimeInterval = 1.0
+    private var lifecycleGeneration: UInt64 = 0
+    private var reconnectDelay: TimeInterval
 
     /// Creates a client for a discovered PatternSpace service.
     ///
     /// - Parameters:
     ///   - service: Service returned by `PatternSpaceDiscovery`.
     ///   - token: Optional bearer token required by servers that enable auth.
-    public init(service: PatternSpaceService, token: String? = nil) {
+    public convenience init(service: PatternSpaceService, token: String? = nil) {
+        self.init(service: service, token: token, transport: WebSocketTransport(), reconnectDelay: 1.0)
+    }
+
+    init(service: PatternSpaceService, token: String?, transport: WebSocketTransport, reconnectDelay: TimeInterval) {
+        self.transport = transport
+        self.initialReconnectDelay = reconnectDelay
+        self.reconnectDelay = reconnectDelay
         self.service = service
         self.token = token
         (eventStream, eventContinuation) = AsyncStream.makeStream()
@@ -78,19 +91,16 @@ public final class PatternSpaceClient: @unchecked Sendable {
         capabilities = CapabilitiesNamespace(session: session, transport: transport)
         output = OutputNamespace(session: session, transport: transport)
 
+        // Both callbacks run on the transport's serial queue, so responses,
+        // notifications and disconnects are handled in socket order.
         session.onNotification = { [weak self] method, params in
             self?.handleNotification(method: method, params: params)
         }
         transport.onMessage = { [weak self] data in
             self?.session.receive(data: data)
         }
-        transport.onDisconnect = { [weak self] error in
-            guard let self else { return }
-            let reason = error ?? PatternSpaceClientError.disconnected
-            self.session.failAllPending(with: reason)
-            guard !self.intentionallyDisconnected else { return }
-            self.eventContinuation.yield(.connectionFailed(reason))
-            self.scheduleReconnect()
+        transport.onDisconnect = { [weak self] disconnect in
+            self?.handleDisconnect(disconnect)
         }
     }
 
@@ -100,33 +110,77 @@ public final class PatternSpaceClient: @unchecked Sendable {
     }
 
     /// Opens the WebSocket connection and starts automatic reconnection.
+    ///
+    /// Calling this while connected replaces the current connection; requests
+    /// pending on the replaced connection fail with
+    /// `PatternSpaceClientError.disconnected`.
     public func connect() {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         intentionallyDisconnected = false
-        transport.connect(to: service.endpoint, token: token)
+        startConnectionLocked()
     }
 
     /// Closes the connection and finishes the event stream.
     public func disconnect() {
+        lifecycleLock.lock()
         intentionallyDisconnected = true
-        session.failAllPending(with: PatternSpaceClientError.disconnected)
+        lifecycleGeneration &+= 1
         transport.disconnect()
+        lifecycleLock.unlock()
         eventContinuation.finish()
     }
 
-    private func scheduleReconnect() {
-        let delay = reconnectDelay
-        reconnectDelay = min(reconnectDelay * 2, 30)
-        Task {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            guard !self.intentionallyDisconnected else { return }
-            self.connect()
+    /// Must hold `lifecycleLock`, so transport operations are enqueued in
+    /// lifecycle order.
+    private func startConnectionLocked() {
+        lifecycleGeneration &+= 1
+        transport.connect(to: service.endpoint, token: token, tag: lifecycleGeneration)
+    }
+
+    private func handleDisconnect(_ disconnect: WebSocketTransport.Disconnect) {
+        // The transport has already invalidated this generation, so nothing
+        // from it can be delivered after its pending calls fail here.
+        guard case .failed(let error) = disconnect.reason else {
+            session.failPending(generation: disconnect.generation, with: PatternSpaceClientError.disconnected)
+            return
         }
+        let reason = error ?? PatternSpaceClientError.disconnected
+        session.failPending(generation: disconnect.generation, with: reason)
+
+        lifecycleLock.lock()
+        let isCurrent = !intentionallyDisconnected && disconnect.tag == lifecycleGeneration
+        let delay = reconnectDelay
+        if isCurrent { reconnectDelay = min(reconnectDelay * 2, 30) }
+        lifecycleLock.unlock()
+        guard isCurrent else { return }
+
+        eventContinuation.yield(.connectionFailed(reason))
+        scheduleReconnect(after: delay, generation: disconnect.tag)
+    }
+
+    private func scheduleReconnect(after delay: TimeInterval, generation: UInt64) {
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            self?.reconnect(ifStillAt: generation)
+        }
+    }
+
+    /// Reconnects only if no connect, reconnect or disconnect happened since
+    /// the failure that scheduled it.
+    private func reconnect(ifStillAt generation: UInt64) {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard !intentionallyDisconnected, lifecycleGeneration == generation else { return }
+        startConnectionLocked()
     }
 
     private func handleNotification(method: String, params: JSONValue?) {
         switch method {
         case "connectionReady":
-            reconnectDelay = 1.0
+            lifecycleLock.lock()
+            reconnectDelay = initialReconnectDelay
+            lifecycleLock.unlock()
             guard let params,
                   let data = try? JSONEncoder().encode(params),
                   let ready = try? JSONDecoder().decode(ConnectionReadyParams.self, from: data) else { return }
