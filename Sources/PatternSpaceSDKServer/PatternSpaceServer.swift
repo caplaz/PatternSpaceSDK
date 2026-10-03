@@ -28,7 +28,11 @@ public final class PatternSpaceServer: @unchecked Sendable {
     /// registered and evicted-but-not-yet-closed connections all live here;
     /// `ClientConnection.lifecycle` distinguishes them.
     private var connections: [ObjectIdentifier: ClientConnection] = [:]
-    /// Guards `connections` and each connection's `lifecycle`.
+    /// True until `start()` and again after `stop()`. `NWListener.cancel()` is
+    /// asynchronous, so a connection handler already in flight can still call
+    /// `accept` after `stop()`; this flag fences it out.
+    private var stopped = true
+    /// Guards `connections`, `stopped` and each connection's `lifecycle`.
     private let lock = NSLock()
     /// Serializes every lifecycle transition together with its callbacks, so
     /// callbacks are delivered in exactly the order the transitions happened.
@@ -38,16 +42,20 @@ public final class PatternSpaceServer: @unchecked Sendable {
     /// Called once for each authenticated client when it becomes the active
     /// client, with the server-minted identity carried by all of its requests.
     ///
-    /// Callbacks run serially on an internal queue, in lifecycle order: when a
-    /// new client replaces an existing one, the old client's
-    /// `onClientDisconnected(_, .evicted)` is delivered before this callback.
-    /// Keep callbacks short and non-blocking (hop to your own actor/queue);
-    /// `stop()` waits for in-progress callbacks to finish.
+    /// Lifecycle callbacks are serialized on an internal queue and delivered
+    /// in lifecycle order: when a new client replaces an existing one, the old
+    /// client's `onClientDisconnected(_, .evicted)` is delivered before this
+    /// callback. Callbacks triggered by `stop()` run synchronously on the thread
+    /// calling `stop()`, which waits for any in-progress callback first. Keep
+    /// callbacks short and non-blocking — hop to your own actor or queue — and
+    /// never `DispatchQueue.main.sync` from one: `stop()` called on the main
+    /// thread would deadlock.
     public var onClientConnected: ((UUID) -> Void)?
 
     /// Called exactly once for each client previously reported to
     /// `onClientConnected`, with the reason its lifecycle ended. Rejected
-    /// (unauthenticated) sockets never produce either callback.
+    /// (unauthenticated) sockets never produce either callback. Delivered under
+    /// the same serialization and constraints as `onClientConnected`.
     public var onClientDisconnected: ((UUID, ClientDisconnectReason) -> Void)?
 
     /// Creates a PatternSpace protocol server.
@@ -82,6 +90,11 @@ public final class PatternSpaceServer: @unchecked Sendable {
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
+        onLifecycleQueue {
+            lock.lock()
+            stopped = false
+            lock.unlock()
+        }
         listener.start(queue: .global(qos: .utility))
         self.listener = listener
     }
@@ -93,13 +106,14 @@ public final class PatternSpaceServer: @unchecked Sendable {
 
         onLifecycleQueue {
             lock.lock()
+            stopped = true
             let snapshot = Array(connections.values)
             connections.removeAll()
-            let stopped = snapshot.filter { $0.lifecycle == .registered }
-            stopped.forEach { $0.lifecycle = .disconnectNotified }
+            let registered = snapshot.filter { $0.lifecycle == .registered }
+            registered.forEach { $0.lifecycle = .disconnectNotified }
             lock.unlock()
 
-            stopped.forEach { onClientDisconnected?($0.id, .serverStopped) }
+            registered.forEach { onClientDisconnected?($0.id, .serverStopped) }
             snapshot.forEach { $0.close() }
         }
     }
@@ -136,11 +150,16 @@ public final class PatternSpaceServer: @unchecked Sendable {
             }
         )
 
-        // Retain the connection until it either upgrades (moves to `clients`)
-        // or closes. Without this, `client` has no strong owner once `accept`
-        // returns, so it deallocates before the WebSocket upgrade is processed
-        // and the server never responds to the handshake.
+        // Retain the connection in `connections` until its close is observed.
+        // Without this, `client` has no strong owner once `accept` returns, so
+        // it deallocates before the WebSocket upgrade is processed and the
+        // server never responds to the handshake.
         lock.lock()
+        guard !stopped else {
+            lock.unlock()
+            connection.cancel()
+            return
+        }
         connections[ObjectIdentifier(client)] = client
         lock.unlock()
 
@@ -154,8 +173,7 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private func registerAndEvictExisting(_ client: ClientConnection) {
         onLifecycleQueue {
             lock.lock()
-            guard client.lifecycle == .pending,
-                  connections[ObjectIdentifier(client)] != nil else {
+            guard canRegister(client) else {
                 // Closed or stopped before the upgrade was registered.
                 lock.unlock()
                 return
@@ -166,13 +184,23 @@ public final class PatternSpaceServer: @unchecked Sendable {
 
             evicted.forEach { onClientDisconnected?($0.id, .evicted) }
 
+            // An eviction callback may have called `stop()` (or the new socket
+            // may have closed); in that case the replacement never registers.
             lock.lock()
-            client.lifecycle = .registered
+            let register = canRegister(client)
+            if register { client.lifecycle = .registered }
             lock.unlock()
-            onClientConnected?(client.id)
+            if register { onClientConnected?(client.id) }
 
             evicted.forEach { $0.close() }
         }
+    }
+
+    /// Must be called with `lock` held.
+    private func canRegister(_ client: ClientConnection) -> Bool {
+        !stopped
+            && client.lifecycle == .pending
+            && connections[ObjectIdentifier(client)] != nil
     }
 
     private func remove(_ client: ClientConnection) {
@@ -231,6 +259,12 @@ public final class PatternSpaceServer: @unchecked Sendable {
     }
 
     #if DEBUG
+    /// Test-only entry point simulating a listener connection handler that
+    /// fires after `stop()` (NWListener cancellation is asynchronous).
+    public func acceptForTest(_ connection: NWConnection) {
+        accept(connection)
+    }
+
     /// Test-only count of sockets the server still tracks (pending, active, or
     /// evicted but not yet observed closed).
     public func openConnectionCountForTest() -> Int {

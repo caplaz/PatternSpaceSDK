@@ -185,6 +185,75 @@ import PatternSpaceSDKCore
         #expect(recorder.events.isEmpty)
     }
 
+    @Test func connectionAcceptedAfterStopNeverRegisters() async throws {
+        let serverPort: UInt16 = 18_794
+        let relayPort: UInt16 = 18_795
+        let server = makeServer(delegate: MockDelegate())
+        let recorder = LifecycleRecorder(server)
+        try server.start(port: serverPort, deviceName: "PatternSpaceSDK late-accept test")
+        server.stop()
+
+        // NWListener.cancel() is asynchronous: emulate its connection handler
+        // still delivering a connection to the server after stop().
+        let relay = try NWListener(using: .tcp, on: NWEndpoint.Port(rawValue: relayPort)!)
+        relay.newConnectionHandler = { server.acceptForTest($0) }
+        relay.start(queue: .global())
+        defer { relay.cancel() }
+
+        let socket = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: relayPort)!, using: .tcp)
+        socket.start(queue: .global())
+        defer { socket.cancel() }
+        socket.send(content: Data(upgradeRequest(token: "test-token").utf8), completion: .contentProcessed { _ in })
+
+        let response = await firstResponse(from: socket)
+        #expect(response?.starts(with: Data("HTTP/1.1 101".utf8)) != true)
+        #expect(recorder.events.isEmpty)
+        #expect(server.openConnectionCountForTest() == 0)
+    }
+
+    @Test func stopFromEvictionCallbackPreventsReplacementRegistration() async throws {
+        let port: UInt16 = 18_796
+        let server = makeServer(delegate: MockDelegate())
+        let recorder = LifecycleRecorder(server)
+        recorder.afterEvent = { event in
+            if event.hasSuffix(":evicted") { server.stop() }
+        }
+        try server.start(port: port, deviceName: "PatternSpaceSDK reentrant stop test")
+        defer { server.stop() }
+
+        let clientA = makeClient(port: port, token: "test-token")
+        clientA.connect()
+        defer { clientA.disconnect() }
+        try await poll { recorder.events == ["connected:A"] }
+
+        let clientB = makeClient(port: port, token: "test-token")
+        clientB.connect()
+        defer { clientB.disconnect() }
+        try await poll { recorder.events.count >= 2 }
+        try await poll { server.openConnectionCountForTest() == 0 }
+
+        // B was never registered: no connected:B, and no later .closed for it.
+        #expect(recorder.events == ["connected:A", "disconnected:A:evicted"])
+    }
+
+    private func upgradeRequest(token: String) -> String {
+        "GET /patternspace HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"
+            + "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            + "Sec-WebSocket-Version: 13\r\nAuthorization: Bearer \(token)\r\n\r\n"
+    }
+
+    /// Returns the first bytes received on `socket`, or nil if it closes, fails,
+    /// or stays silent for 3 seconds.
+    private func firstResponse(from socket: NWConnection) async -> Data? {
+        await withCheckedContinuation { continuation in
+            let once = ResumeOnce(continuation)
+            socket.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, _, _ in
+                once.resume(data.flatMap { $0.isEmpty ? nil : $0 })
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) { once.resume(nil) }
+        }
+    }
+
     /// Polls `condition` every 10 ms until it holds, failing after 3 seconds.
     private func poll(
         _ condition: @escaping @Sendable () -> Bool,
@@ -266,13 +335,15 @@ private final class LifecycleRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var labels: [UUID: String] = [:]
     private var recorded: [String] = []
+    /// Invoked on the server's lifecycle callback thread after each event is recorded.
+    var afterEvent: (@Sendable (String) -> Void)?
 
     init(_ server: PatternSpaceServer) {
         server.onClientConnected = { [self] id in
-            append { "connected:\(label(for: id))" }
+            record { "connected:\(label(for: id))" }
         }
         server.onClientDisconnected = { [self] id, reason in
-            append { "disconnected:\(label(for: id)):\(reason)" }
+            record { "disconnected:\(label(for: id)):\(reason)" }
         }
     }
 
@@ -281,9 +352,13 @@ private final class LifecycleRecorder: @unchecked Sendable {
         return recorded
     }
 
-    private func append(_ makeEvent: () -> String) {
-        lock.lock(); defer { lock.unlock() }
-        recorded.append(makeEvent())
+    private func record(_ makeEvent: () -> String) {
+        lock.lock()
+        let event = makeEvent()
+        recorded.append(event)
+        let hook = afterEvent
+        lock.unlock()
+        hook?(event)
     }
 
     /// Must be called with `lock` held.
@@ -292,5 +367,22 @@ private final class LifecycleRecorder: @unchecked Sendable {
         let label = String(UnicodeScalar(UInt8(65 + labels.count)))
         labels[id] = label
         return label
+    }
+}
+
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Data?, Never>?
+
+    init(_ continuation: CheckedContinuation<Data?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: Data?) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
     }
 }
