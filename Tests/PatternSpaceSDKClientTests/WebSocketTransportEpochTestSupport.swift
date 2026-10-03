@@ -130,19 +130,43 @@ final class TestWebSocketServer: @unchecked Sendable {
         let parameters = NWParameters.tcp
         parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
         let listener = try NWListener(using: parameters, on: .any)
-        let ready = DispatchSemaphore(value: 0)
-        listener.stateUpdateHandler = { if case .ready = $0 { ready.signal() } }
+        let state = ListenerState()
+        listener.stateUpdateHandler = { if case .ready = $0 { state.markReady() } }
         let queue = DispatchQueue(label: "TestWebSocketServer.listener")
-        var server: TestWebSocketServer?
-        listener.newConnectionHandler = { connection in server?.accept(connection) }
+        listener.newConnectionHandler = { connection in state.server?.accept(connection) }
         listener.start(queue: queue)
-        guard ready.wait(timeout: .now() + 3) == .success, let port = listener.port?.rawValue else {
+        guard await state.waitUntilReady(timeout: 3), let port = listener.port?.rawValue else {
             listener.cancel()
             throw EpochTestError.timedOut
         }
         let created = TestWebSocketServer(listener: listener, port: port)
-        queue.sync { server = created }
+        state.server = created
         return created
+    }
+
+    /// Listener readiness and the server reference shared with the
+    /// listener's callbacks, guarded by a lock instead of captured `var`s.
+    private final class ListenerState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var ready = false
+        private var storedServer: TestWebSocketServer?
+
+        var server: TestWebSocketServer? {
+            get { lock.withLock { storedServer } }
+            set { lock.withLock { storedServer = newValue } }
+        }
+
+        func markReady() { lock.withLock { ready = true } }
+
+        /// Polls readiness without blocking a cooperative-pool thread.
+        func waitUntilReady(timeout: TimeInterval) async -> Bool {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if lock.withLock({ ready }) { return true }
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+            return lock.withLock { ready }
+        }
     }
 
     func endpoint(_ path: WebSocketTransportEpochTests.TransportPath) -> NWEndpoint {

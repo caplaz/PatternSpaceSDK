@@ -263,7 +263,10 @@ import PatternSpaceSDKCore
         let rpc = Task { try await pattern.clear() }
         try await poll { server.requestIDs(on: 0).count == 1 }
 
-        weak var released = client
+        // Declared then assigned so it is a mutated `weak var` on every toolchain
+        // (`weak let` needs Swift 6.2+; the CI runner is older).
+        weak var released: PatternSpaceClient?
+        released = client
         client?.disconnect()
         client = nil
         #expect(released == nil)
