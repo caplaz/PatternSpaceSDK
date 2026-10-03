@@ -251,6 +251,28 @@ import PatternSpaceSDKCore
     }
 
     @Test(arguments: TransportPath.allCases)
+    func pendingCallFailsWhenClientIsReleasedAfterDisconnect(path: TransportPath) async throws {
+        let server = try await TestWebSocketServer.start()
+        defer { server.stop() }
+        var client: PatternSpaceClient? = makeClient(server, path)
+        let events = EventRecorder(try #require(client))
+        let pattern = try #require(client).pattern
+
+        client?.connect()
+        try await poll { events.markers == ["ready-0"] }
+        let rpc = Task { try await pattern.clear() }
+        try await poll { server.requestIDs(on: 0).count == 1 }
+
+        weak let released = client
+        client?.disconnect()
+        client = nil
+        #expect(released == nil)
+        await #expect(throws: PatternSpaceClientError.self) {
+            try await withTimeout { try await rpc.value }
+        }
+    }
+
+    @Test(arguments: TransportPath.allCases)
     func eventsPreserveServerOrder(path: TransportPath) async throws {
         let server = try await TestWebSocketServer.start()
         defer { server.stop() }

@@ -96,10 +96,21 @@ public final class PatternSpaceClient: @unchecked Sendable {
         session.onNotification = { [weak self] method, params in
             self?.handleNotification(method: method, params: params)
         }
-        transport.onMessage = { [weak self] data in
-            self?.session.receive(data: data)
+        // `session` is captured strongly (it holds no reference back to the
+        // transport) so responses and disconnect failures still reach pending
+        // calls made through a retained namespace after the client is released.
+        let session = session
+        transport.onMessage = { data in
+            session.receive(data: data)
         }
         transport.onDisconnect = { [weak self] disconnect in
+            // The transport has already invalidated this generation, so
+            // nothing from it can be delivered after its pending calls fail.
+            if case .failed(let error?) = disconnect.reason {
+                session.failPending(generation: disconnect.generation, with: error)
+            } else {
+                session.failPending(generation: disconnect.generation, with: PatternSpaceClientError.disconnected)
+            }
             self?.handleDisconnect(disconnect)
         }
     }
@@ -122,6 +133,10 @@ public final class PatternSpaceClient: @unchecked Sendable {
     }
 
     /// Closes the connection and finishes the event stream.
+    ///
+    /// Requests still pending fail with `PatternSpaceClientError.disconnected`
+    /// asynchronously, once the transport has closed the socket — including
+    /// when the client is released immediately afterwards.
     public func disconnect() {
         lifecycleLock.lock()
         intentionallyDisconnected = true
@@ -138,15 +153,11 @@ public final class PatternSpaceClient: @unchecked Sendable {
         transport.connect(to: service.endpoint, token: token, tag: lifecycleGeneration)
     }
 
+    /// Reports a failed socket and schedules reconnection; pending calls of
+    /// that generation were already failed by the `onDisconnect` closure.
     private func handleDisconnect(_ disconnect: WebSocketTransport.Disconnect) {
-        // The transport has already invalidated this generation, so nothing
-        // from it can be delivered after its pending calls fail here.
-        guard case .failed(let error) = disconnect.reason else {
-            session.failPending(generation: disconnect.generation, with: PatternSpaceClientError.disconnected)
-            return
-        }
+        guard case .failed(let error) = disconnect.reason else { return }
         let reason = error ?? PatternSpaceClientError.disconnected
-        session.failPending(generation: disconnect.generation, with: reason)
 
         lifecycleLock.lock()
         let isCurrent = !intentionallyDisconnected && disconnect.tag == lifecycleGeneration

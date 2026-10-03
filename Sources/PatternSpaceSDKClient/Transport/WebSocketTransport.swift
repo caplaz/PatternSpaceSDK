@@ -12,11 +12,15 @@ import Network
 /// never deliver a message or report a disconnect after the new socket's
 /// traffic. Callbacks run on the queue; calls back into the transport from
 /// them are enqueued, never dispatched synchronously.
+///
+/// On both paths a send error ends the socket (reported `.failed`), and a
+/// server close frame or end of stream is reported as `.failed(nil)`, which
+/// the client treats as a dropped connection and reconnects automatically.
 final class WebSocketTransport: @unchecked Sendable {
-    /// Which native API carried a receive completion.
-    enum Path: Sendable { case urlSession, native }
-
     /// Raw result of one socket receive, before epoch validation.
+    ///
+    /// `@unchecked` only because `Error` payloads from URLSession/Network are
+    /// not statically `Sendable`; the value is immutable once created.
     enum Outcome: @unchecked Sendable {
         case message(Data)
         case closed
@@ -24,7 +28,6 @@ final class WebSocketTransport: @unchecked Sendable {
     }
 
     struct ReceiveCompletion: Sendable {
-        let path: Path
         let outcome: Outcome
     }
 
@@ -138,9 +141,10 @@ final class WebSocketTransport: @unchecked Sendable {
 
     private func openWebSocket(to endpoint: NWEndpoint, token: String?, epoch: UInt64) {
         guard let url = webSocketURL(for: endpoint) else {
+            // Invalidate the generation before reporting it, as `endCurrentSocket` does.
+            connectionEpoch &+= 1
             onDisconnect?(Disconnect(generation: epoch, tag: socketTag,
                                      reason: .failed(WebSocketTransportError.invalidEndpoint)))
-            connectionEpoch &+= 1
             return
         }
 
@@ -177,9 +181,9 @@ final class WebSocketTransport: @unchecked Sendable {
                     self.receiveNative(from: connection, epoch: epoch)
                 }
             case .failed(let error):
-                self.complete(ReceiveCompletion(path: .native, outcome: .failed(error)), epoch: epoch)
+                self.complete(ReceiveCompletion(outcome: .failed(error)), epoch: epoch)
             case .cancelled:
-                self.complete(ReceiveCompletion(path: .native, outcome: .closed), epoch: epoch)
+                self.complete(ReceiveCompletion(outcome: .closed), epoch: epoch)
             default:
                 break
             }
@@ -196,7 +200,7 @@ final class WebSocketTransport: @unchecked Sendable {
             case .success: outcome = .message(Data())
             case .failure(let error): outcome = .failed(error)
             }
-            self?.complete(ReceiveCompletion(path: .urlSession, outcome: outcome), epoch: epoch)
+            self?.complete(ReceiveCompletion(outcome: outcome), epoch: epoch)
         }
     }
 
@@ -213,7 +217,7 @@ final class WebSocketTransport: @unchecked Sendable {
             } else {
                 outcome = .closed
             }
-            self?.complete(ReceiveCompletion(path: .native, outcome: outcome), epoch: epoch)
+            self?.complete(ReceiveCompletion(outcome: outcome), epoch: epoch)
         }
     }
 
