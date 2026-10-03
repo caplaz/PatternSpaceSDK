@@ -63,13 +63,14 @@ Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integra
   "result": {
     "protocolVersion": "1.3",
     "app": { "name": "PatternSpace", "version": "1.2.0", "build": "1" },
-    "sdkVersion": "0.7.0",
+    "sdkVersion": "1.0.0",
     "platform": "macOS",
     "authRequired": true,
     "namespaces": {
       "capabilities": ["list"],
       "device": ["info", "status"],
       "display": ["list", "setPeakWhite", "listOutputColorPresets", "getOutputColorPreset", "setOutputColorPreset", "setMeasurementRange"],
+      "output": ["blank", "resume"],
       "pattern": ["display", "displayColor", "displayPatch", "clear", "list", "get"]
     },
     "features": {
@@ -81,10 +82,13 @@ Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integra
       "catalogPatterns": true,
       "customICCBuilder": false,
       "httpBridge": false
-    }
+    },
+    "outputBlank": true
   }
 }
 ```
+
+`outputBlank` is a top-level optional flag (absent from older hosts). Call `output.*` only when it is `true`. The SDK route manifest always lists the `output` namespace, so hosts that do not implement blanking reply `methodNotFound` (`-32601`) and omit `outputBlank`.
 
 ## Pattern Methods
 
@@ -174,6 +178,8 @@ Returns static device information such as name, resolution, color format, bit de
 ### `device.status`
 
 Returns runtime state: current pattern id, JSON source activity, selected source/display, profile resolution, auth mode, connected client count, app version/build, SDK version, protocol version, selected output preset, EDR headroom, reference-white, and clip-onset diagnostics. Decoders should ignore unknown additive fields.
+
+When the host reports output ownership and blank state, `device.status` includes an optional `output` object with the [`OutputStatus`](#outputstatus) shape.
 
 Protocol `1.2` no longer defines the legacy typed color-management mode fields. Hosts using output presets should report `outputColorPresetId` and `outputColorPresetImplementationStatus`.
 
@@ -419,11 +425,108 @@ Sets the host-global measurement range to the open-string value `full` or
 Legal range assumes full-range source values. Do not legal-encode in both the
 source and PatternSpace, or the signal will be encoded twice.
 
+## Output Methods
+
+Output methods blank and restore the host output on purpose (for example, black between measurements while a calibration run is paused) and report who owns the content underneath. They have the same trust boundary as the `pattern.*` write methods: the connection must have passed token authentication, and the JSON source must be active (`sourceNotActive`, `-32005`, otherwise). The server attaches the sending connection's identity to each request; it is never read from params, and requests from an evicted or closed connection cannot change output.
+
+Neither method takes parameters. `params` may be absent, `{}`, or `[]`. Non-empty params, `null`, and scalar values return `invalidParams` (`-32602`).
+
+### `output.blank`
+
+Blanks the output and returns the resulting [`OutputStatus`](#outputstatus).
+
+```json
+{ "jsonrpc": "2.0", "id": 20, "method": "output.blank" }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 20,
+  "result": {
+    "owner": "jsonClient",
+    "ownerConnected": true,
+    "blankRequester": "jsonClient",
+    "blanked": "remote",
+    "blankPending": false,
+    "failure": null,
+    "idleBlankSeconds": null,
+    "epoch": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+    "revision": 42
+  }
+}
+```
+
+- The response is sent after the host confirms the blank on the selected output. Repeated calls while a blank is pending join that attempt; calls while already blanked are idempotent.
+- If newer output supersedes the blank before it is confirmed (for example, a new patch from the owning controller), the call succeeds with the current status, which may show no blank or a pending blank for a new target. Superseded is not a failure; read the returned status rather than assuming black.
+- If the blank failed or the selected output's state is unknown, the call fails with `outputNotConfirmed` (`-32013`).
+
+### `output.resume`
+
+Cancels a pending or active blank, restores the underlying content, and returns the resulting `OutputStatus` after restoration is submitted. When nothing is blanked it is a no-op that returns the current status, unless the output state is unknown, which returns `outputNotConfirmed` (`-32013`). Neither method clears an unknown-output state; that requires explicit recovery on the host.
+
+### Success after supersession
+
+A success response from any output write (`pattern.*` or `output.*`) means the host accepted the request. On SDI outputs it does not guarantee the frame was physically emitted: an accepted patch can be superseded by newer output before emission. Clients that need to know what is currently on screen should read the latest `OutputStatus`.
+
+### `OutputStatus`
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `owner` | string | Owner of the underlying content, not the blank requester: `none`, `colourSpace`, `calman`, `pGenerator`, `jsonClient`, or `local`. |
+| `ownerConnected` | bool | Whether the exact connection that produced the content is still active. |
+| `blankRequester` | string or null | Producer that requested the pending or active blank (same vocabulary as `owner`); `null` outside a pending or active blank. |
+| `blanked` | string or null | `manual`, `idle`, or `remote`, set only after the blank is confirmed; `null` while pending or when not blanked. |
+| `blankPending` | bool | A blank has been requested but not yet confirmed. |
+| `failure` | string or null | `notPresented` (the blank never reached the selected display) or `outputUnknown` (the selected output's state is unknown and requires explicit recovery); `null` otherwise. Failure takes priority over retained content: retained content is intent, not proof of physical output. |
+| `idleBlankSeconds` | integer or null | Host idle-blank interval in seconds; `null` when idle blank is off. |
+| `epoch` | string | Opaque UUID minted each time the host server starts. Epochs have no order; never compare them except for equality. |
+| `revision` | integer | Status revision, monotonic within an `epoch` for the life of that server (not reset per client connection). |
+
+The SDK encodes absent optional fields as explicit `null`; decoders accept either `null` or a missing key.
+
+Ordering rules for clients:
+
+- `revision` orders statuses only within the same `epoch`. A different `epoch` means the host server restarted; resynchronize (for example, call `device.status`) rather than comparing values.
+- After `connectionReady`, apply a status from an event or a current-connection RPC result only if its `epoch` matches the handshake and its `revision` is greater than the last one applied. Discard results of requests sent on an earlier connection.
+- `epoch` and `revision` do not identify a client connection.
+
+`OutputStatus` appears as:
+
+- the result of `output.blank` and `output.resume`;
+- optional `output` on `device.status`;
+- optional `output` on the `device.statusChanged` payload, which the host broadcasts on every status revision;
+- optional `output` on `connectionReady`.
+
+The `output` field is absent from hosts that do not report it.
+
+## Errors
+
+PatternSpace-specific JSON-RPC error codes:
+
+| Code | Name | Meaning |
+| --- | --- | --- |
+| `-32002` | `patternNotFound` | Unknown pattern id. |
+| `-32003` | `displayError` | The host failed to display the requested pattern. |
+| `-32004` | `invalidBitDepth` | Unsupported bit depth. |
+| `-32005` | `sourceNotActive` | The JSON source is not the active source. |
+| `-32006` | `rateLimitExceeded` | Too many requests in the current rate-limit window. |
+| `-32007` | `displayNotFound` | Unknown display id. |
+| `-32008` | `peakWhiteOutOfRange` | Peak White outside the accepted range. |
+| `-32009` | `notAuthorized` | Not authorized, including Pro entitlement failures. |
+| `-32011` | `displaySelectionMismatch` | Write target does not match the selected output. |
+| `-32012` | `outputColorPresetUnsupported` | Unknown or unsupported output color preset. |
+| `-32013` | `outputNotConfirmed` | Output blank failed, or the selected output state is unknown. |
+
+Standard JSON-RPC codes (`-32700`, `-32600`, `-32601`, `-32602`, `-32603`) keep their usual meanings.
+
 ## Notifications
 
 ### `connectionReady`
 
-Sent after a successful WebSocket upgrade. The server accepts one client at a time. A new successful WebSocket upgrade drops any existing client before `connectionReady` is sent to the new client.
+Sent after a successful WebSocket upgrade. The server accepts one client at a time. A new successful WebSocket upgrade drops any existing client before `connectionReady` is sent to the new client. The payload may include an optional `output` [`OutputStatus`](#outputstatus), which establishes the status `epoch` for the connection.
+
+The Swift client fences delivery by connection: no event from a replaced socket is delivered after the new connection's `connectionReady`.
 
 ### `pattern.changed`
 
@@ -431,7 +534,7 @@ Sent when the displayed pattern changes.
 
 ### `device.statusChanged`
 
-Sent when device state changes.
+Sent when device state changes. The payload may include an optional `output` [`OutputStatus`](#outputstatus).
 
 ### `display.changed`
 

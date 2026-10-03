@@ -4,6 +4,37 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [1.0.0] - 2026-10-03
+
+### Added
+- `output.blank` and `output.resume` server routes under a new `output` namespace (listed in `JSONRPCDispatcher.routeManifest` and therefore in `capabilities.list`), with required delegate hooks `blankOutput(context:)` and `resumeOutput(context:)`. Both return the resulting `OutputStatus`; both require an authenticated connection and an active JSON source (`sourceNotActive` otherwise), exactly like the `pattern.*` write methods.
+- `OutputStatus` schema with `owner`, `ownerConnected`, `blankRequester`, `blanked`, `blankPending`, `failure`, `idleBlankSeconds`, `epoch`, and `revision`, plus the enums `PSOutputOwner`, `PSOutputBlankReason`, and `PSOutputFailure`. Absent optional fields are encoded as explicit JSON `null`; decoders accept either a missing key or `null`.
+- Optional `output: OutputStatus?` on `DeviceStatus` (`device.status`), `DeviceSnapshot` (`device.statusChanged`), and `ConnectionReadyParams` (`connectionReady`). It decodes as `nil` from hosts that do not report it.
+- `CapabilitiesResult.outputBlank: Bool?` so clients can detect blank support before calling `output.*`; `nil` from older hosts.
+- `PSErrorCode.outputNotConfirmed` (`-32013`) for a blank that failed or an output whose state is unknown.
+- `OutputRequestContext` carrying the server-minted `clientID` of the authenticated connection that sent an output-write request. It is captured at dispatch and never read from JSON params.
+- `PatternSpaceServer.onClientConnected: (UUID) -> Void`, delivered once per authenticated client when it becomes the active client, with the same identity carried by its `OutputRequestContext`.
+- `ClientDisconnectReason` (`closed`, `evicted`, `serverStopped`).
+- Client `client.output.blank()` and `client.output.resume()` via the new `OutputNamespace`.
+
+### Changed
+- **BREAKING:** The six output-write delegate methods are now required context-bearing methods with no default implementations and no context-free overloads: `displayPattern(id:context:)`, `displayColor(_:bitDepth:context:)`, `displayPatch(_:context:)`, `clearDisplay(context:)`, `blankOutput(context:)`, and `resumeOutput(context:)`. Hosts must compare the context with their current connection before mutating output so requests from an evicted or closed client cannot change output. Hosts without blank support must throw `PSDispatchError(.methodNotFound)` from `blankOutput`/`resumeOutput` and omit `CapabilitiesResult.outputBlank`.
+- **BREAKING:** `JSONRPCDispatcher.dispatch(_:)` is now `dispatch(_:context:)`; output writes forward the context to the delegate and read handlers ignore it.
+- **BREAKING:** `PatternSpaceServer.onClientDisconnected` is now `(UUID, ClientDisconnectReason) -> Void` and is delivered exactly once for every client previously reported to `onClientConnected`, regardless of how many clients remain. On replacement the evicted client's `.evicted` callback is delivered before the replacement's `onClientConnected`; `stop()` reports `.serverStopped` for every client not yet reported. Rejected (unauthenticated) sockets never produce either callback, and connections accepted after `stop()` are fenced out.
+- Lifecycle callbacks are serialized on an internal queue in lifecycle order. Callbacks triggered by `stop()` run synchronously on the thread calling `stop()` after any in-progress callback finishes. Keep callbacks short and non-blocking (hop to your own actor or queue) and never call `DispatchQueue.main.sync` from one, or a `stop()` on the main thread will deadlock.
+- `output.blank` and `output.resume` accept absent params, `{}`, or `[]`; non-empty params, `null`, and scalar params return `invalidParams`.
+- The client transport now fences message delivery by connection: connection replacement, identity validation, disconnect reporting, and message delivery share one serialization boundary, so no event from an old socket can be yielded after the new connection's `connectionReady`. This applies to both the URLSession and Network.framework transports.
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `1.0.0`; PatternSpace JSON protocol remains `1.3` (the `output` namespace is additive and discoverable through `capabilities.list` and `outputBlank`).
+
+### Fixed
+- Pending JSON-RPC calls now fail asynchronously when the connection drops, including when the `PatternSpaceClient` has already been released, instead of leaving awaiting callers suspended.
+- Native WebSocket close frames and send errors now end the socket and trigger auto-reconnect, rather than leaving the client attached to a dead connection.
+
+### Migration
+- Add a `context: OutputRequestContext` parameter to `displayPattern`, `displayColor`, `displayPatch`, and `clearDisplay`, and implement `blankOutput(context:)` and `resumeOutput(context:)` (throw `methodNotFound` if unsupported).
+- Replace `onClientDisconnected = { ... }` closures with the `(UUID, ClientDisconnectReason)` signature and track the active client with `onClientConnected`.
+- Pass a context to direct `JSONRPCDispatcher.dispatch` callers (for example in tests): `dispatch(data, context: OutputRequestContext(clientID: UUID()))`.
+
 ## [0.7.6] - 2026-09-10
 
 ### Fixed

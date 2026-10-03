@@ -2,7 +2,7 @@
 
 WebSocket JSON-RPC SDK for PatternSpace integration.
 
-PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying capabilities, inspecting richer device/display state, adjusting Peak White, discovering output color presets, and receiving live status events.
+PatternSpaceSDK gives calibration tools and automation clients a typed Swift interface for discovering PatternSpace devices, connecting over WebSocket, displaying patterns, querying capabilities, inspecting richer device/display state, adjusting Peak White, discovering output color presets, blanking and resuming output, and receiving live status events.
 
 ## Features
 
@@ -12,7 +12,7 @@ PatternSpaceSDK gives calibration tools and automation clients a typed Swift int
 - JSON-RPC 2.0 request and notification envelopes
 - WebSocket transport over Network.framework
 - Optional bearer-token authentication
-- Client API for capabilities, pattern, device, and display namespaces
+- Client API for capabilities, pattern, device, display, and output namespaces
 - Server API for embedding the protocol in PatternSpace-compatible apps
 - Swift Testing coverage for core JSON models, dispatch, input validation, WebSocket upgrade, and frame handling
 
@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "0.7.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "1.0.0")
     ],
     targets: [
         .executableTarget(
@@ -108,6 +108,11 @@ if let selected = displays.displays.first(where: \.selected) {
         measurementRange: .legal
     )
 }
+if capabilities.outputBlank == true {
+    let blanked = try await client.output.blank()
+    print("Blanked:", blanked.blanked as Any, "revision", blanked.revision)
+    _ = try await client.output.resume()
+}
 try await client.pattern.clear()
 client.disconnect()
 ```
@@ -119,20 +124,34 @@ import PatternSpaceSDKCore
 import PatternSpaceSDKServer
 
 final class Delegate: PatternSpaceServerDelegate {
-    func displayPattern(id: String) async throws {
-        print("Display pattern", id)
+    // Output writes carry the server-minted identity of the sending client.
+    // Compare `context.clientID` with the client reported by
+    // `onClientConnected` before mutating output.
+    func displayPattern(id: String, context: OutputRequestContext) async throws {
+        print("Display pattern", id, "from", context.clientID)
     }
 
-    func displayColor(_ color: PSColor, bitDepth: BitDepth) async throws {
+    func displayColor(_ color: PSColor, bitDepth: BitDepth,
+                      context: OutputRequestContext) async throws {
         print("Display color", color, bitDepth)
     }
 
-    func displayPatch(_ params: PatchParams) async throws {
+    func displayPatch(_ params: PatchParams, context: OutputRequestContext) async throws {
         print("Display patch", params)
     }
 
-    func clearDisplay() async throws {
+    func clearDisplay(context: OutputRequestContext) async throws {
         print("Clear pattern")
+    }
+
+    // Hosts without blank support must throw methodNotFound here and leave
+    // `CapabilitiesResult.outputBlank` nil.
+    func blankOutput(context: OutputRequestContext) async throws -> OutputStatus {
+        throw PSDispatchError(.methodNotFound)
+    }
+
+    func resumeOutput(context: OutputRequestContext) async throws -> OutputStatus {
+        throw PSDispatchError(.methodNotFound)
     }
 
     func listPatterns(category: String?, subcategory: String?) async throws -> [PatternInfo] {
@@ -340,10 +359,19 @@ let server = PatternSpaceServer(
     }
 )
 
+server.onClientConnected = { clientID in
+    Task { @MainActor in print("Client connected", clientID) }
+}
+server.onClientDisconnected = { clientID, reason in
+    Task { @MainActor in print("Client disconnected", clientID, reason) }
+}
+
 try server.start(port: 7878, deviceName: "PatternSpace")
 ```
 
 `PatternSpaceServer` is single-client by design. When a new WebSocket upgrade succeeds, the server drops any existing client before sending `connectionReady` to the new one.
+
+Every authenticated client receives exactly one `onClientConnected` and one `onClientDisconnected` callback. On replacement, the old client's `.evicted` callback is delivered before the new client's `onClientConnected`; `stop()` reports `.serverStopped` for clients still connected. Callbacks are serialized on an internal queue and may run on the thread that calls `stop()`, so keep them short, hop to your own actor or queue, and never call `DispatchQueue.main.sync` from one.
 
 ## Authentication
 
@@ -402,6 +430,11 @@ Display methods:
 - `display.setOutputColorPreset`
 - `display.setMeasurementRange`
 
+Output methods (check `capabilities.list` → `outputBlank` first):
+
+- `output.blank`
+- `output.resume`
+
 Notifications:
 
 - `connectionReady`
@@ -424,7 +457,7 @@ The package intentionally avoids third-party dependencies so it can be embedded 
 
 ## Versioning
 
-PatternSpaceSDK follows semantic versioning. The initial `0.x` series may still adjust public API while the JSON protocol stabilizes.
+PatternSpaceSDK follows semantic versioning. Starting with `1.0.0`, source-breaking public API changes are reserved for major releases. See [CHANGELOG.md](CHANGELOG.md) for migration notes, including the `1.0.0` context-bearing delegate and client-lifecycle changes.
 
 ## License
 
