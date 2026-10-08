@@ -106,4 +106,32 @@ import PatternSpaceSDKCore
         #expect(response.evidence.source.reason == .payloadLimit)
     }
 
+    @Test(arguments: [Double.nan, Double.infinity, -Double.infinity])
+    func invalidCaptureInitializerIsRejected(_ timestamp: Double) throws {
+        for interval in [SignalCaptureInterval(startedAt: timestamp, completedAt: 2),
+                         SignalCaptureInterval(startedAt: 1, completedAt: timestamp)] {
+            let response = SignalSnapshotResponse(evidence: .init(identity: .init(diagnosticsEpoch: "e", revision: 1),
+                capture: interval, freshness: .current))
+            #expect(throws: SignalSnapshotValidationError.invalidEvidence) { try response.validate() }
+        }
+    }
+
+    @Test func unsupportedSchemaCannotCarryAuthorizationOrDecodeAsUsableEvidence() throws {
+        let response = SignalSnapshotResponse(evidence: .init(schemaVersion: 2,
+            identity: .init(diagnosticsEpoch: "e", revision: 1), capture: .init(startedAt: 1, completedAt: 2), freshness: .current),
+            probeAuthorization: .init(expectedContextGuard: "guard", context: .init(diagnosticsEpoch: "e",
+                targetRevision: 0, configurationRevision: 0, ownershipRevision: 0)))
+        #expect(throws: SignalSnapshotValidationError.unsupportedSchema(2)) { try response.validate() }
+        #expect(throws: SignalSnapshotValidationError.unsupportedSchema(2)) {
+            try SignalSnapshotResponse.decodeValidated(JSONEncoder().encode(response))
+        }
+    }
+
+    @Test func incompatibleFutureShapeReportsUnsupportedBeforeFieldDecoding() throws {
+        let data = Data(#"{"evidence":{"schemaVersion":9,"newShape":true},"probeAuthorization":{"unsafeFutureField":true}}"#.utf8)
+        #expect(throws: SignalSnapshotValidationError.unsupportedSchema(9)) {
+            try SignalSnapshotResponse.decodeValidated(data)
+        }
+    }
+
 }

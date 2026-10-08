@@ -41,8 +41,8 @@ public struct SignalCaptureInterval: Codable, Sendable, Equatable {
     public let startedAt: Double
     public let completedAt: Double
     public init(startedAt: Double, completedAt: Double) {
-        self.startedAt = startedAt.isFinite ? startedAt : 0
-        self.completedAt = completedAt.isFinite ? completedAt : self.startedAt
+        self.startedAt = startedAt
+        self.completedAt = completedAt
     }
 }
 

@@ -57,6 +57,7 @@ public enum SignalSnapshotValidationError: Error, Sendable, Equatable {
     case tooManySamples
     case invalidEvidence
     case invalidAuthorization
+    case unsupportedSchema(Int)
 }
 
 /// Connection-specific read response. Share/export only `evidence`, never this envelope.
@@ -82,15 +83,24 @@ public struct SignalSnapshotResponse: Codable, Sendable, Equatable {
         return bounded
     }
 
-    /// Checks the wire bound before decoding. Unknown major schemas are retained with `isSupportedSchema == false`.
+    /// Checks the wire bound and schema before decoding any evidence or authorization.
     public static func decodeValidated(_ data: Data) throws -> Self {
         guard data.count <= maximumPayloadBytes else { throw SignalSnapshotValidationError.payloadTooLarge }
+        struct Header: Decodable {
+            struct Evidence: Decodable { let schemaVersion: Int }
+            let evidence: Evidence
+        }
+        let schema = try JSONDecoder().decode(Header.self, from: data).evidence.schemaVersion
+        guard schema == 1 else { throw SignalSnapshotValidationError.unsupportedSchema(schema) }
         let response = try JSONDecoder().decode(Self.self, from: data)
         try response.validate()
         return response
     }
 
     public func validate() throws {
+        guard evidence.isSupportedSchema else {
+            throw SignalSnapshotValidationError.unsupportedSchema(evidence.schemaVersion)
+        }
         guard !evidence.identity.diagnosticsEpoch.isEmpty,
               evidence.capture.startedAt.isFinite, evidence.capture.completedAt.isFinite,
               evidence.capture.completedAt >= evidence.capture.startedAt else {
