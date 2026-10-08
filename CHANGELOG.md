@@ -4,6 +4,22 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [1.1.0] - Unreleased
+
+### Added
+- Optional `device.signalSnapshot` read route and `DeviceNamespace.signalSnapshot()` returning schema-1 immutable evidence separately from connection-bound probe authorization. The delegate receives the authenticated `OutputRequestContext`; reads remain available while the JSON source is inactive.
+- Optional `pattern.displayProbe` route and `PatternNamespace.displayProbe(_:)` carrying the existing patch shape plus a bounded opaque `expectedContextGuard`. The SDK reuses ordinary patch validation and forwards guard/context to the host for atomic authorization and admission. It never falls back to `displayPatch`.
+- Typed source samples, scalar stage observations, separate accepted/published identities, draw/mapping/presentation identities, capture intervals, explicit unknown/omission reasons, and forward-compatible open tokens. Evidence excludes guard and packed frame buffers. Encoded responses are bounded to 256 KiB; each stage retains at most 64 samples with explicit omitted counts. Oversized optional details are marked omitted; oversized identity fails safely.
+- Default unsupported delegate hooks and `supportsSignalSnapshot` / `supportsSignalProbe` opt-ins preserve 1.0.0 conformers. Optional `CapabilityFeatures.signalSnapshot` / `signalProbe` have trailing initializer defaults and decode absent from older hosts.
+
+### Changed
+- `capabilities.list` filters only unsupported new routes/flags, preserving all existing namespace entries. Unsupported new methods return method-not-found.
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `1.1.0`; JSON protocol remains `1.3`. Existing routes, device bit-depth meaning, ACK behavior and global session timeout behavior remain unchanged.
+
+### Host integration
+- Guards belong to the authenticated connection and stable expected target/configuration/ownership context, independent of snapshot revisions and new patches. Historical responses must have no authorization; stable Refresh must not rotate a current guard. Stale context uses `displayError`, a different connection uses `notAuthorized`, inactive source uses `sourceNotActive`, malformed guard uses `invalidParams`.
+- Share only evidence and apply host export redaction to identifiers/optional descriptions. The SDK does not inspect OS profiles, calculate SDI packing, attest physical transport, or supply a per-request timeout.
+
 ## [1.0.0] - 2026-10-03
 
 ### Added

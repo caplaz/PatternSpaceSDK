@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "1.0.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "1.1.0")
     ],
     targets: [
         .executableTarget(
@@ -445,6 +445,16 @@ Notifications:
 See [Documentation](Documentation/Protocol.md) for the wire-format overview.
 
 The `sourceActive` field is a race-condition guard. In normal PatternSpace operation, changing away from the JSON source stops the server and closes the socket rather than keeping a client connected with `sourceActive: false`.
+
+## Signal transparency (SDK 1.1.0)
+
+Check `capabilities.features.signalSnapshot == true` before reading `client.device.signalSnapshot()`. The response separates immutable `evidence` from optional connection-bound `probeAuthorization`. Share or export evidence only. Schema 1 records source request provenance, app mapping, SDI software encoding and physical-signal unknowns; software observations do not certify a physical cable or panel.
+
+A host opts in with `supportsSignalSnapshot` / `supportsSignalProbe` and implements `signalSnapshot(context:)` / `displayProbe(_:context:)`. Existing delegates compile unchanged: new hooks default to unsupported and new capability fields default to nil. Unsupported hosts omit the new namespace methods and feature flags and return method-not-found. Advertise each flag only for supported functionality; `JSONRPCDispatcher.routeManifest` includes optional routes and dispatch filters them for the host.
+
+When `features.signalProbe == true` and the snapshot provides authorization, an explicit sample uses `client.pattern.displayProbe(SignalProbeParams(patch: patch, expectedContextGuard: authorization.expectedContextGuard))`. The host must validate the authenticated connection and exact expected context atomically with its existing patch admission. The SDK shares ordinary patch validation but never substitutes an unguarded patch write. A success follows the existing admission contract; cancelling a submitted request cannot prevent a sample from appearing. The SDK adds no RPC timeout, automatic retry, or transport changes.
+
+See [Signal transparency](Documentation/SignalTransparency.md) for the schema, bounds, forward compatibility and host obligations. JSON protocol remains 1.3; the evidence schema is independently versioned.
 
 ## Development
 

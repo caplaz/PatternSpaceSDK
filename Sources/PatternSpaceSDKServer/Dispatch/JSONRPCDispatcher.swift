@@ -6,11 +6,13 @@ enum JSONRPCRoute: String, CaseIterable {
     case capabilitiesList = "capabilities.list"
     case deviceInfo = "device.info"
     case deviceStatus = "device.status"
+    case deviceSignalSnapshot = "device.signalSnapshot"
     case patternList = "pattern.list"
     case patternGet = "pattern.get"
     case patternDisplay = "pattern.display"
     case patternDisplayColor = "pattern.displayColor"
     case patternDisplayPatch = "pattern.displayPatch"
+    case patternDisplayProbe = "pattern.displayProbe"
     case patternClear = "pattern.clear"
     case displayList = "display.list"
     case displaySetPeakWhite = "display.setPeakWhite"
@@ -35,7 +37,7 @@ enum JSONRPCRoute: String, CaseIterable {
 /// This type owns protocol-level request validation, method routing, and
 /// JSON-RPC error response construction.
 public final class JSONRPCDispatcher: @unchecked Sendable {
-    private weak var delegate: (any PatternSpaceServerDelegate)?
+    weak var delegate: (any PatternSpaceServerDelegate)?
 
     /// Creates a dispatcher for a server delegate.
     public init(delegate: any PatternSpaceServerDelegate) {
@@ -86,7 +88,11 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         let params = obj["params"]
         do {
             let result = try await route(method: method, params: params, context: context)
-            return encode(JSONRPCSuccessResponse(id: id, result: result))
+            let response = encode(JSONRPCSuccessResponse(id: id, result: result))
+            if method == "device.signalSnapshot", response.count > SignalSnapshotResponse.maximumPayloadBytes {
+                return errorResponse(id: id, code: .internalError, message: "Signal snapshot exceeds payload limit")
+            }
+            return response
         } catch let e as PSDispatchError {
             return errorResponse(id: id, code: e.code, message: e.message, data: e.data)
         } catch {
@@ -119,6 +125,8 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         case .patternGet: return try await handleGet(params)
         case .deviceInfo: return try await handleDeviceInfo()
         case .deviceStatus: return try await handleDeviceStatus()
+        case .deviceSignalSnapshot: return try await handleSignalSnapshot(params, context: context)
+        case .patternDisplayProbe: return try await handleSignalProbe(params, context: context)
         case .displayList: return try await handleDisplayList()
         case .displaySetPeakWhite: return try await handleSetPeakWhite(params)
         case .displayListOutputColorPresets: return try await handleListOutputColorPresets(params)
@@ -132,7 +140,7 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
 
     // MARK: - Write handlers
 
-    private func requireSourceActive() throws {
+    func requireSourceActive() throws {
         guard delegate?.isSourceActive == true else { throw PSDispatchError(.sourceNotActive) }
     }
 
@@ -171,41 +179,9 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
     }
 
     private func handleDisplayPatch(_ params: JSONValue?, context: OutputRequestContext) async throws -> JSONValue {
-        let obj = params?.object ?? [:]
-        guard let bg = obj["background"]?.object,
-              let br = bg["r"]?.number, let bg_g = bg["g"]?.number, let bb = bg["b"]?.number,
-              let rectValues = obj["rectangles"]?.array,
-              let bdInt = obj["bitDepth"]?.int else {
-            throw PSDispatchError(.invalidParams, message: "background, rectangles, and bitDepth are required")
-        }
-        try InputValidator.validateColor(r: br, g: bg_g, b: bb)
-        try InputValidator.validateBitDepth(bdInt)
-        try InputValidator.validateRectangleCount(rectValues.count)
-        guard let bitDepth = BitDepth(rawValue: bdInt) else { throw PSDispatchError(.invalidBitDepth) }
-
-        let rectangles = try rectValues.map { value -> PatchRectangle in
-            guard let obj = value.object,
-                  let colorObject = obj["color"]?.object,
-                  let r = colorObject["r"]?.number,
-                  let g = colorObject["g"]?.number,
-                  let b = colorObject["b"]?.number,
-                  let x = obj["x"]?.number,
-                  let y = obj["y"]?.number,
-                  let width = obj["width"]?.number,
-                  let height = obj["height"]?.number else {
-                throw PSDispatchError(.invalidParams, message: "each rectangle requires color, x, y, width, and height")
-            }
-            try InputValidator.validateColor(r: r, g: g, b: b)
-            try InputValidator.validateRectangle(x: x, y: y, width: width, height: height)
-            return PatchRectangle(color: PSColor(r: r, g: g, b: b), x: x, y: y, width: width, height: height)
-        }
-
+        let patch = try InputValidator.patch(params)
         try requireSourceActive()
-        try await delegate?.displayPatch(PatchParams(
-            background: PSColor(r: br, g: bg_g, b: bb),
-            rectangles: rectangles,
-            bitDepth: bitDepth
-        ), context: context)
+        try await delegate?.displayPatch(patch, context: context)
         return .object([:])
     }
 
@@ -218,7 +194,7 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
     // MARK: - Output handlers
 
     /// Output methods take no params: accept absent, `{}` or `[]` only.
-    private func requireNoParams(_ params: JSONValue?) throws {
+    func requireNoParams(_ params: JSONValue?) throws {
         switch params {
         case nil: return
         case .object(let object) where object.isEmpty: return
@@ -289,7 +265,7 @@ public final class JSONRPCDispatcher: @unchecked Sendable {
         guard let capabilities = try await delegate?.capabilities() else {
             throw PSDispatchError(.internalError)
         }
-        return try encodeToJSONValue(capabilities)
+        return try filteredSignalCapabilities(capabilities)
     }
 
     // MARK: - Display handlers

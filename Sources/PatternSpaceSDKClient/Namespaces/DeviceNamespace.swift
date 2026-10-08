@@ -26,4 +26,12 @@ public final class DeviceNamespace: Sendable {
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode(DeviceStatus.self, from: data)
     }
+    /// Captures bounded immutable host evidence. Unsupported hosts return methodNotFound.
+    /// Share `response.evidence` only; the optional authorization is connection-specific.
+    public func signalSnapshot() async throws -> SignalSnapshotResponse {
+        struct Params: Encodable {}
+        let result = try await session.send(method: "device.signalSnapshot", params: Params(), via: transport)
+        return try SignalSnapshotResponse.decodeValidated(JSONEncoder().encode(result))
+    }
+
 }

@@ -76,6 +76,16 @@ public final class PatternNamespace: Sendable {
         )
     }
 
+    /// Explicit guarded diagnostic sample; success retains the host's normal admission contract.
+    /// This method never falls back to displayPatch. Check the signalProbe capability first.
+    /// Cancellation cannot recall an already submitted sample; no per-request timeout is added.
+    public func displayProbe(_ params: SignalProbeParams) async throws {
+        guard SignalProbeParams.isValidGuard(params.expectedContextGuard) else {
+            throw PSDispatchError(.invalidParams, message: "Malformed expectedContextGuard")
+        }
+        _ = try await session.send(method: "pattern.displayProbe", params: params, via: transport)
+    }
+
     /// Clears the current JSON protocol pattern from the display.
     public func clear() async throws {
         struct Params: Encodable {}

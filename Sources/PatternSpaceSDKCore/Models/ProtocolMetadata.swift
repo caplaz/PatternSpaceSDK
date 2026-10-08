@@ -6,5 +6,5 @@ public enum PatternSpaceProtocolMetadata {
     public static let protocolVersion = "1.3"
 
     /// SDK package version exposing this protocol surface.
-    public static let sdkVersion = "1.0.0"
+    public static let sdkVersion = "1.1.0"
 }

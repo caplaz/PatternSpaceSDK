@@ -23,6 +23,8 @@ public struct CapabilityFeatures: Codable, Sendable, Equatable {
     public let catalogPatterns: Bool
     public let customICCBuilder: Bool
     public let httpBridge: Bool
+    public let signalSnapshot: Bool?
+    public let signalProbe: Bool?
 
     public init(
         events: Bool,
@@ -32,7 +34,9 @@ public struct CapabilityFeatures: Codable, Sendable, Equatable {
         measurementRange: Bool,
         catalogPatterns: Bool,
         customICCBuilder: Bool,
-        httpBridge: Bool
+        httpBridge: Bool,
+        signalSnapshot: Bool? = nil,
+        signalProbe: Bool? = nil
     ) {
         self.events = events
         self.displayInventory = displayInventory
@@ -42,6 +46,8 @@ public struct CapabilityFeatures: Codable, Sendable, Equatable {
         self.catalogPatterns = catalogPatterns
         self.customICCBuilder = customICCBuilder
         self.httpBridge = httpBridge
+        self.signalSnapshot = signalSnapshot
+        self.signalProbe = signalProbe
     }
 }
 
