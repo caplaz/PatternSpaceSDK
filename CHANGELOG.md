@@ -4,7 +4,7 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-10-09
 
 ### Added
 - Optional `device.signalSnapshot` read route and `DeviceNamespace.signalSnapshot()` returning schema-1 immutable evidence separately from connection-bound probe authorization. The delegate receives the authenticated `OutputRequestContext`; reads remain available while the JSON source is inactive.
