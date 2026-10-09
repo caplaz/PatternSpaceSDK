@@ -85,6 +85,18 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
     /// Display configuration writes do not require the JSON source to be active.
     func setMeasurementRange(_ params: SetMeasurementRangeParams) async throws -> SetMeasurementRangeResult
 
+    /// Opt-in support; defaults preserve existing 1.0.0 conformers.
+    var supportsSignalSnapshot: Bool { get }
+    var supportsSignalProbe: Bool { get }
+
+    /// Read-only immutable evidence with authorization for this authenticated connection, if eligible.
+    func signalSnapshot(context: OutputRequestContext) async throws -> SignalSnapshotResponse
+
+    /// Guarded patch admission. Validate connection/guard/context atomically with normal output admission.
+    /// A stale context throws displayError; a different connection throws notAuthorized.
+    /// Never implement this by falling back to an unguarded displayPatch call before checking context.
+    func displayProbe(_ params: SignalProbeParams, context: OutputRequestContext) async throws
+
     // MARK: Source state
 
     /// Returns true when the JSON source is the currently selected PatternSourceSelection.
@@ -93,6 +105,15 @@ public protocol PatternSpaceServerDelegate: AnyObject, Sendable {
 }
 
 public extension PatternSpaceServerDelegate {
+    var supportsSignalSnapshot: Bool { false }
+    var supportsSignalProbe: Bool { false }
+    func signalSnapshot(context: OutputRequestContext) async throws -> SignalSnapshotResponse {
+        throw PSDispatchError(.methodNotFound)
+    }
+    func displayProbe(_ params: SignalProbeParams, context: OutputRequestContext) async throws {
+        throw PSDispatchError(.methodNotFound)
+    }
+
     func listOutputColorPresets(displayId: String) async throws -> OutputColorPresetList {
         OutputColorPresetList(
             displayId: displayId,

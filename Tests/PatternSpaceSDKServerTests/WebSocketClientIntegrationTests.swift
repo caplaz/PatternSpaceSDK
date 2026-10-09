@@ -236,6 +236,46 @@ import PatternSpaceSDKCore
         #expect(recorder.events == ["connected:A", "disconnected:A:evicted"])
     }
 
+    @Test func signalClientMethodsRoundTripWithoutPatchFallback() async throws {
+        let port: UInt16 = 18_797
+        let delegate = MockDelegate()
+        delegate.supportsSignalSnapshot = true; delegate.supportsSignalProbe = true
+        let server = makeServer(delegate: delegate)
+        try server.start(port: port, deviceName: "Signal test")
+        defer { server.stop() }
+        let client = makeClient(port: port, token: "test-token")
+        client.connect(); defer { client.disconnect() }
+        let snapshot = try await withinTwoSeconds(client) { try await client.device.signalSnapshot() }
+        #expect(snapshot.evidence.identity.diagnosticsEpoch == "epoch")
+        let patch = PatchParams(background: .init(r: 0, g: 0, b: 0), rectangles: [
+            .init(color: .init(r: 1, g: 0, b: 0), x: 0, y: 0, width: 1, height: 1)
+        ], bitDepth: .ten)
+        try await withinTwoSeconds(client) {
+            try await client.pattern.displayProbe(.init(patch: patch, expectedContextGuard: "guard"))
+        }
+        #expect(delegate.signalProbeParams?.patch == patch)
+        #expect(delegate.signalProbeContext == delegate.signalReadContext)
+        #expect(delegate.patchContexts.isEmpty)
+    }
+
+    @Test func newSignalClientReceivesMethodNotFoundFromOldHost() async throws {
+        let port: UInt16 = 18_798
+        let delegate = MockDelegate()
+        let server = makeServer(delegate: delegate)
+        try server.start(port: port, deviceName: "Old host test")
+        defer { server.stop() }
+        let client = makeClient(port: port, token: "test-token")
+        client.connect(); defer { client.disconnect() }
+        do {
+            _ = try await withinTwoSeconds(client) { try await client.device.signalSnapshot() }
+            Issue.record("Old host unexpectedly supported signal snapshots")
+        } catch let error as PSDispatchError {
+            #expect(error.code == .methodNotFound)
+        }
+        let status = try await withinTwoSeconds(client) { try await client.device.status() }
+        #expect(status.sourceActive)
+    }
+
     private func upgradeRequest(token: String) -> String {
         "GET /patternspace HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"
             + "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"

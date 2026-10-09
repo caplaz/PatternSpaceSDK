@@ -1,4 +1,5 @@
 import Foundation
+import PatternSpaceSDKCore
 import Network
 
 /// WebSocket transport with a serialized delivery fence.
@@ -154,6 +155,7 @@ final class WebSocketTransport: @unchecked Sendable {
         }
 
         let task = URLSession.shared.webSocketTask(with: request)
+        task.maximumMessageSize = SignalSnapshotResponse.maximumPayloadBytes
         socket = .urlSession(task)
         task.resume()
         receive(from: task, epoch: epoch)
@@ -162,7 +164,7 @@ final class WebSocketTransport: @unchecked Sendable {
     private func openNativeWebSocket(to endpoint: NWEndpoint, token: String?, epoch: UInt64) {
         let webSocketOptions = NWProtocolWebSocket.Options()
         webSocketOptions.autoReplyPing = true
-        webSocketOptions.maximumMessageSize = 65_536
+        webSocketOptions.maximumMessageSize = SignalSnapshotResponse.maximumPayloadBytes
         if let token {
             webSocketOptions.setAdditionalHeaders([("Authorization", "Bearer \(token)")])
         }
