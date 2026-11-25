@@ -226,7 +226,7 @@ Returns display inventory and selected display metadata.
 
 `platform` is `macOS` or `iOS`. `connection` is `builtIn`, `wired`, `airPlay`, or `unknown`. `peakWhite` is the stored EDR-relative Peak White value. `effectivePeakWhite` is the value currently in use after non-destructive clamping to the display's current capability.
 
-Preset IDs are open strings. `supportedOutputColorPresetIds` is a quick display-entry summary; clients that need labels, groups, support reasons, or color-science details should call the preset catalog methods below.
+Preset IDs are open strings. `supportedOutputColorPresetIds` is a quick display-entry summary; clients that need labels, groups, support reasons, or color-science details should call the preset catalog methods below. The arrays in this document are illustrative and are not exhaustive; use `display.listOutputColorPresets` for the live catalog.
 
 ### `display.setPeakWhite`
 
@@ -266,6 +266,15 @@ Output presets replace the old closed color-management mode API. The SDK defines
 
 Remote patches follow the active preset's input encoding exactly: SDR Reference decodes the configured transfer function, HDR PQ decodes normalized PQ signals, Linear HDR treats values as linear light, and Device Native passes values through raw. Built-in PatternSpace Library patterns are generated internally in linear light. They use the active preset's output color space when applicable, and Linear HDR presets apply Peak White. HDR PQ presets do not make Library patterns PQ-encoded; use HDR PQ when an external measurement workflow sends PQ patch values.
 
+The `toneMappedHDRP3D65PQ` and `toneMappedHDRBT2020PQ` presets are distinct
+from the untone-mapped `hdrP3D65PQ` and `hdrBT2020PQ` presets. They accept
+normalized ST 2084 PQ signal values but delegate PQ interpretation and tone
+mapping to macOS through a PQ-tagged layer. Their output depends on the active
+display and macOS tone-mapping behavior. They omit `clipOnsetNits` and
+`clipOnsetPQSignal`, and should not be used for deterministic EOTF calibration.
+For that, use the untone-mapped PQ presets, where PatternSpace decodes PQ and
+reports the predicted hard-clip onset.
+
 `catalogRevision` is an opaque cache token sourced from the host catalog. It is identical across `display.listOutputColorPresets` and `display.getOutputColorPreset` while the catalog is unchanged, and it changes whenever the preset set, summary metadata, or full config for any preset changes. Clients may cache full configs by `(presetId, catalogRevision)`.
 
 ### `display.listOutputColorPresets`
@@ -296,6 +305,15 @@ Returns lightweight preset summaries for UI/discovery.
         "implementationStatus": "native",
         "supported": true,
         "requiresPro": true
+      },
+      {
+        "id": "toneMappedHDRBT2020PQ",
+        "label": "BT.2020 ST 2084",
+        "group": "toneMappedHDR",
+        "family": "hdrReference",
+        "implementationStatus": "native",
+        "supported": true,
+        "requiresPro": true
       }
     ]
   }
@@ -311,7 +329,7 @@ Returns the full self-describing config for a known preset.
 ```json
 {
   "displayId": "69734272",
-  "presetId": "hdrBT2020PQ"
+  "presetId": "toneMappedHDRBT2020PQ"
 }
 ```
 
@@ -323,29 +341,27 @@ Returns the full self-describing config for a known preset.
     "displayId": "69734272",
     "catalogRevision": "2026-06-17.1",
     "preset": {
-      "id": "hdrBT2020PQ",
-      "label": "BT.2020 PQ",
-      "group": "hdr",
+      "id": "toneMappedHDRBT2020PQ",
+      "label": "BT.2020 ST 2084",
+      "group": "toneMappedHDR",
       "family": "hdrReference",
       "gamut": "bt2020",
       "whitePoint": "d65",
       "transfer": "pqSt2084",
       "dynamicRange": "hdr",
-      "toneMapping": "none",
+      "toneMapping": "system",
       "inputEncoding": "pqSt2084",
       "implementationStatus": "native",
       "supported": true,
       "requiresPro": true,
-      "layerColorSpace": "extendedLinearITUR_2020",
+      "layerColorSpace": "itur_2100_PQ",
       "edrHeadroomRequired": 2.0,
       "edrHeadroomPotential": 4.0,
       "edrHeadroomCurrent": 2.0,
       "edrHeadroomReference": 1.0,
       "referenceWhiteNits": 100.0,
       "referenceWhiteNitsSource": "defaultCalibration100",
-      "peakLuminanceNits": 200.0,
-      "clipOnsetNits": 200.0,
-      "clipOnsetPQSignal": 0.579
+      "peakLuminanceNits": 200.0
     }
   }
 }
@@ -389,7 +405,7 @@ Sets the host-global output color preset and returns the selected display that a
       "peakWhiteRange": { "minimum": 0.25, "maximum": 4.0 },
       "supportsPeakWhiteControl": false,
       "outputColorPresetId": "hdrBT2020PQ",
-      "supportedOutputColorPresetIds": ["deviceNative", "sdrReferenceSRGB", "hdrP3D65PQ", "hdrBT2020PQ", "extLinearSRGBHDR", "linearHDRP3D65", "linearHDRBT2020"],
+      "supportedOutputColorPresetIds": ["deviceNative", "sdrReferenceSRGB", "hdrP3D65PQ", "hdrBT2020PQ", "toneMappedHDRP3D65PQ", "toneMappedHDRBT2020PQ", "extLinearSRGBHDR", "linearHDRP3D65", "linearHDRBT2020"],
       "outputColorPresetImplementationStatus": "native"
     }
   }
