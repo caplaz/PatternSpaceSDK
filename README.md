@@ -41,7 +41,7 @@ let package = Package(
     name: "MyTool",
     platforms: [.macOS(.v12), .iOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "1.1.0")
+        .package(url: "https://github.com/caplaz/PatternSpaceSDK.git", from: "1.2.0")
     ],
     targets: [
         .executableTarget(
@@ -365,6 +365,9 @@ server.onClientConnected = { clientID in
 server.onClientDisconnected = { clientID, reason in
     Task { @MainActor in print("Client disconnected", clientID, reason) }
 }
+server.onListenerEvent = { event in
+    Task { @MainActor in print("Listener", event) }
+}
 
 try server.start(port: 7878, deviceName: "PatternSpace")
 ```
@@ -372,6 +375,8 @@ try server.start(port: 7878, deviceName: "PatternSpace")
 `PatternSpaceServer` is single-client by design. When a new WebSocket upgrade succeeds, the server drops any existing client before sending `connectionReady` to the new one.
 
 Every authenticated client receives exactly one `onClientConnected` and one `onClientDisconnected` callback. On replacement, the old client's `.evicted` callback is delivered before the new client's `onClientConnected`; `stop()` reports `.serverStopped` for clients still connected. Callbacks are serialized on an internal queue and may run on the thread that calls `stop()`, so keep them short, hop to your own actor or queue, and never call `DispatchQueue.main.sync` from one.
+
+`start()` throws only for invalid listener parameters; the port binds asynchronously. `onListenerEvent` reports `.ready` once the server is accepting connections, or `.failed(NWError)` if it cannot bind (for example, another process holds the port). A bind that fails because a just-stopped server on the same port hasn't released it yet is retried for about two seconds first, so stop-then-start restarts are safe. No listener event is delivered once `stop()` has begun, and listener events share the client callbacks' serialization and constraints.
 
 ## Authentication
 
