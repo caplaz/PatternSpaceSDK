@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 - `PatternSpaceProtocolMetadata.sdkVersion` is now `1.2.0`; JSON protocol remains `1.3`.
 
+### Documentation
+- `Documentation/Protocol.md` and the README describe the `400 Bad Request` response for malformed upgrades and the guarantee that rejection responses are written before the connection closes. The `capabilities.list` example shows `sdkVersion` `1.2.0`.
+
 ## [1.1.0] - 2026-10-09
 
 ### Added

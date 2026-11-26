@@ -29,6 +29,8 @@ Authorization: Bearer <token>
 
 Invalid or missing credentials receive HTTP `401 Unauthorized`; valid clients receive `101 Switching Protocols`. When auth is required, unauthenticated clients are rejected during the WebSocket upgrade before JSON-RPC dispatch. Clients can still discover whether auth is required from the Bonjour TXT record.
 
+A malformed upgrade request receives HTTP `400 Bad Request`. A rejected request always gets its full HTTP response before the server closes the connection (SDK 1.2.0 and later), so a client can tell a wrong or missing token (`401`) apart from a network failure or a server that isn't listening, and show the user that the pairing code is the problem. Servers built with SDK 1.1.0 or earlier could close the socket before the response was written.
+
 ## Envelopes
 
 Requests use JSON-RPC 2.0 with a string or integer `id`. Notifications omit `id`.
@@ -63,7 +65,7 @@ Returns protocol, app, SDK, route, feature, platform, and auth metadata. Integra
   "result": {
     "protocolVersion": "1.3",
     "app": { "name": "PatternSpace", "version": "1.2.0", "build": "1" },
-    "sdkVersion": "1.0.0",
+    "sdkVersion": "1.2.0",
     "platform": "macOS",
     "authRequired": true,
     "namespaces": {
