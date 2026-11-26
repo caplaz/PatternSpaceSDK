@@ -4,6 +4,19 @@ All notable changes to PatternSpaceSDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning.
 
+## [1.2.0] - 2026-11-26
+
+### Added
+- `PatternSpaceServer.onListenerEvent` reports `.ready` once the listener is bound and `.failed(NWError)` when it cannot bind or stops unexpectedly. `start()` returning only means the bind was scheduled.
+
+### Fixed
+- Stopping a server and immediately starting another on the same port no longer fails silently. `NWListener.cancel()` releases the port asynchronously, so the new bind used to fail with `EADDRINUSE` and leave nothing listening. The server now retries an `EADDRINUSE` bind for about two seconds before reporting `.failed`.
+- `stop()` during a pending bind retry cancels it; no listener event is delivered once `stop()` has begun.
+- A rejected WebSocket upgrade now reaches the client: a missing or wrong token gets `401 Unauthorized` and a malformed request gets `400 Bad Request`. The server used to cancel the socket straight after queueing the response, so clients saw the connection close with no HTTP status. Close frames (1000, 1002, 1009) are now also written before the socket closes.
+
+### Changed
+- `PatternSpaceProtocolMetadata.sdkVersion` is now `1.2.0`; JSON protocol remains `1.3`.
+
 ## [1.1.0] - 2026-10-09
 
 ### Added
