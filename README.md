@@ -386,7 +386,7 @@ When a server is configured with a token, clients must send:
 Authorization: Bearer <token>
 ```
 
-The server rejects unauthorized upgrade requests with HTTP `401 Unauthorized` before accepting the WebSocket. Token comparison is constant-time. Prefer a high-entropy per-device token stored in the platform keychain or another secure credential store.
+The server rejects unauthorized upgrade requests with HTTP `401 Unauthorized` before accepting the WebSocket, and malformed upgrades with `400 Bad Request`. The full response is written before the connection closes, so clients can report a wrong pairing code instead of a generic connection failure. Token comparison is constant-time. Prefer a high-entropy per-device token stored in the platform keychain or another secure credential store.
 
 Pass `nil` for the server token to run in insecure mode. Insecure mode should be limited to trusted local networks or test harnesses.
 
