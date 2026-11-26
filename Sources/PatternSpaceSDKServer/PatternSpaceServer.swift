@@ -12,6 +12,26 @@ public enum ClientDisconnectReason: Sendable, Equatable {
     case serverStopped
 }
 
+/// Listener state changes reported by `PatternSpaceServer.onListenerEvent`.
+public enum PatternSpaceServerListenerEvent: Sendable {
+    /// The listener is bound and accepting connections on its port.
+    case ready
+    /// The listener could not bind or stopped unexpectedly. The server is no
+    /// longer listening; call `stop()` and start a new server to retry.
+    case failed(NWError)
+}
+
+/// How a server retries a bind that fails because the port is still in use.
+struct ListenerBindRetryPolicy: Sendable {
+    var maxRetries: Int
+    var delay: DispatchTimeInterval
+
+    /// About two seconds in total: enough for a just-cancelled listener in the
+    /// same process to release its port, short enough to report a port held
+    /// by another process promptly.
+    static let standard = ListenerBindRetryPolicy(maxRetries: 20, delay: .milliseconds(100))
+}
+
 /// WebSocket JSON-RPC server for embedding PatternSpace protocol support.
 ///
 /// The server advertises itself with Bonjour, accepts WebSocket connections
@@ -23,7 +43,14 @@ public final class PatternSpaceServer: @unchecked Sendable {
     private let upgradeHandler: WebSocketUpgradeHandler
     private let dispatcher: JSONRPCDispatcher
     private let buildConnectionReady: (Bool) -> ConnectionReadyParams
+    /// Guarded by `lock`. Replaced on each bind retry.
     private var listener: NWListener?
+    /// Incremented by every `start()` and `stop()` under `lock`, so a delayed
+    /// bind retry or a late listener state from an earlier run is ignored.
+    private var listenerGeneration = 0
+    private let listenerQueue = DispatchQueue(label: "PatternSpaceServer.listener")
+    /// Internal so tests can shorten the retry window.
+    var bindRetryPolicy = ListenerBindRetryPolicy.standard
     /// Every accepted socket, retained until its close is observed. Pending,
     /// registered and evicted-but-not-yet-closed connections all live here;
     /// `ClientConnection.lifecycle` distinguishes them.
@@ -58,6 +85,17 @@ public final class PatternSpaceServer: @unchecked Sendable {
     /// the same serialization and constraints as `onClientConnected`.
     public var onClientDisconnected: ((UUID, ClientDisconnectReason) -> Void)?
 
+    /// Called when the listener becomes ready or fails. Binding is
+    /// asynchronous: `start()` returning only means the bind was scheduled.
+    /// A bind that fails because the port is still in use (typically a server
+    /// on the same port that was just stopped) is retried for about two seconds
+    /// before `.failed` is reported. Never called once `stop()` has begun.
+    ///
+    /// Serialized with the client lifecycle callbacks on an internal queue,
+    /// under the same constraints: keep it short, hop to your own actor or
+    /// queue, and never `DispatchQueue.main.sync` from it.
+    public var onListenerEvent: ((PatternSpaceServerListenerEvent) -> Void)?
+
     /// Creates a PatternSpace protocol server.
     ///
     /// - Parameters:
@@ -76,43 +114,40 @@ public final class PatternSpaceServer: @unchecked Sendable {
     }
 
     /// Starts listening for WebSocket clients and advertising over Bonjour.
+    ///
+    /// Throws only for invalid listener parameters. The bind itself completes
+    /// asynchronously; observe `onListenerEvent` for the outcome.
     public func start(port: UInt16 = 7878, deviceName: String) throws {
-        let parameters = NWParameters.tcp
-        parameters.allowLocalEndpointReuse = true
-        let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
-
-        listener.service = NWListener.Service(
-            name: deviceName,
-            type: "_patternspace._tcp",
-            txtRecord: NWTXTRecord(serviceTXTRecord())
-        )
-
-        listener.newConnectionHandler = { [weak self] connection in
-            self?.accept(connection)
-        }
+        let listener = try makeListener(port: port, deviceName: deviceName)
+        var generation = 0
         onLifecycleQueue {
             lock.lock()
             stopped = false
+            listenerGeneration += 1
+            generation = listenerGeneration
+            let superseded = self.listener
+            self.listener = nil
             lock.unlock()
+            superseded?.cancel()
         }
-        listener.start(queue: .global(qos: .utility))
-        self.listener = listener
+        run(listener, port: port, deviceName: deviceName, generation: generation, attempt: 0)
     }
 
     /// Stops the listener and closes all connected clients.
     public func stop() {
-        listener?.cancel()
-        listener = nil
-
         onLifecycleQueue {
             lock.lock()
             stopped = true
+            listenerGeneration += 1
+            let listener = self.listener
+            self.listener = nil
             let snapshot = Array(connections.values)
             connections.removeAll()
             let registered = snapshot.filter { $0.lifecycle == .registered }
             registered.forEach { $0.lifecycle = .disconnectNotified }
             lock.unlock()
 
+            listener?.cancel()
             registered.forEach { onClientDisconnected?($0.id, .serverStopped) }
             snapshot.forEach { $0.close() }
         }
@@ -128,6 +163,118 @@ public final class PatternSpaceServer: @unchecked Sendable {
         lock.unlock()
 
         snapshot.forEach { $0.send(frame) }
+    }
+
+    private func makeListener(port: UInt16, deviceName: String) throws -> NWListener {
+        let parameters = NWParameters.tcp
+        parameters.allowLocalEndpointReuse = true
+        guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
+            throw NWError.posix(.EINVAL)
+        }
+        let listener = try NWListener(using: parameters, on: endpointPort)
+        listener.service = NWListener.Service(
+            name: deviceName,
+            type: "_patternspace._tcp",
+            txtRecord: NWTXTRecord(serviceTXTRecord())
+        )
+        listener.newConnectionHandler = { [weak self] connection in
+            self?.accept(connection)
+        }
+        return listener
+    }
+
+    /// Installs `listener` as the current listener for `generation` and starts it,
+    /// unless `stop()` or a newer `start()` has superseded that generation.
+    private func run(_ listener: NWListener, port: UInt16, deviceName: String,
+                     generation: Int, attempt: Int) {
+        listener.stateUpdateHandler = { [weak self, weak listener] state in
+            guard let self, let listener else { return }
+            self.handleListenerState(state, of: listener, port: port, deviceName: deviceName,
+                          generation: generation, attempt: attempt)
+        }
+
+        lock.lock()
+        guard !stopped, listenerGeneration == generation else {
+            lock.unlock()
+            return
+        }
+        self.listener = listener
+        lock.unlock()
+
+        listener.start(queue: listenerQueue)
+    }
+
+    /// Runs on `listenerQueue`.
+    private func handleListenerState(_ state: NWListener.State, of listener: NWListener,
+                          port: UInt16, deviceName: String, generation: Int, attempt: Int) {
+        guard isCurrent(listener, generation: generation) else { return }
+
+        switch state {
+        case .ready:
+            deliver(.ready, generation: generation)
+        case .failed(let error):
+            listener.cancel()
+            if case .posix(.EADDRINUSE) = error, attempt < bindRetryPolicy.maxRetries {
+                listenerQueue.asyncAfter(deadline: .now() + bindRetryPolicy.delay) { [weak self] in
+                    self?.retryBind(port: port, deviceName: deviceName,
+                                    generation: generation, attempt: attempt + 1)
+                }
+                return
+            }
+            if clearListener(ifCurrent: listener, generation: generation) {
+                deliver(.failed(error), generation: generation)
+            }
+        default:
+            break
+        }
+    }
+
+    /// Runs on `listenerQueue`.
+    private func retryBind(port: UInt16, deviceName: String, generation: Int, attempt: Int) {
+        lock.lock()
+        let current = !stopped && listenerGeneration == generation
+        lock.unlock()
+        guard current else { return }
+
+        do {
+            let next = try makeListener(port: port, deviceName: deviceName)
+            run(next, port: port, deviceName: deviceName, generation: generation, attempt: attempt)
+        } catch let error as NWError {
+            lock.lock()
+            let report = !stopped && listenerGeneration == generation
+            if report { self.listener = nil }
+            lock.unlock()
+            if report { deliver(.failed(error), generation: generation) }
+        } catch {
+            // `NWListener(using:on:)` only throws `NWError`.
+        }
+    }
+
+    /// Delivers `event` on the lifecycle queue, which `stop()` also runs on, so
+    /// an event is either delivered before `stop()` starts or not at all.
+    private func deliver(_ event: PatternSpaceServerListenerEvent, generation: Int) {
+        onLifecycleQueue {
+            lock.lock()
+            let current = !stopped && listenerGeneration == generation
+            lock.unlock()
+            if current { onListenerEvent?(event) }
+        }
+    }
+
+    private func isCurrent(_ listener: NWListener, generation: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !stopped && listenerGeneration == generation && self.listener === listener
+    }
+
+    private func clearListener(ifCurrent listener: NWListener, generation: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !stopped, listenerGeneration == generation, self.listener === listener else {
+            return false
+        }
+        self.listener = nil
+        return true
     }
 
     private func accept(_ connection: NWConnection) {
@@ -286,204 +433,4 @@ public final class PatternSpaceServer: @unchecked Sendable {
         serviceTXTRecord()
     }
     #endif
-}
-
-private final class ClientConnection: @unchecked Sendable {
-    private static let maxHTTPHeaderBytes = 16 * 1024
-
-    enum Lifecycle {
-        /// Accepted but not (yet) an authenticated, registered client.
-        case pending
-        /// Reported to `onClientConnected`; disconnect not yet reported.
-        case registered
-        /// `onClientDisconnected` has been delivered for this client.
-        case disconnectNotified
-    }
-
-    /// Server-minted identity forwarded with every request from this client.
-    let id = UUID()
-
-    /// Guarded by the owning server's lock; transitions only on its lifecycle queue.
-    var lifecycle: Lifecycle = .pending
-
-    private let connection: NWConnection
-    private let upgradeHandler: WebSocketUpgradeHandler
-    private let dispatcher: JSONRPCDispatcher
-    private let onRejected: (NWEndpoint) -> Void
-    private let onUpgraded: (ClientConnection) -> Void
-    private let onClosed: (ClientConnection) -> Void
-
-    private var upgraded = false
-    private var headerBuffer = Data()
-    private var frameBuffer = Data()
-    private var requestCount = 0
-    private var windowStart = Date()
-
-    init(connection: NWConnection,
-         upgradeHandler: WebSocketUpgradeHandler,
-         dispatcher: JSONRPCDispatcher,
-         onRejected: @escaping (NWEndpoint) -> Void,
-         onUpgraded: @escaping (ClientConnection) -> Void,
-         onClosed: @escaping (ClientConnection) -> Void) {
-        self.connection = connection
-        self.upgradeHandler = upgradeHandler
-        self.dispatcher = dispatcher
-        self.onRejected = onRejected
-        self.onUpgraded = onUpgraded
-        self.onClosed = onClosed
-    }
-
-    func start() {
-        connection.stateUpdateHandler = { [weak self] state in
-            if case .cancelled = state {
-                guard let self else { return }
-                self.onClosed(self)
-            }
-        }
-        connection.start(queue: .global(qos: .utility))
-        receive()
-    }
-
-    func send(_ data: Data) {
-        connection.send(content: data, completion: .contentProcessed { _ in })
-    }
-
-    func close() {
-        connection.cancel()
-    }
-
-    private func receive() {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
-
-            if error != nil || isComplete {
-                self.connection.cancel()
-                return
-            }
-
-            if let data, !data.isEmpty {
-                self.upgraded ? self.handleFrames(data) : self.handleUpgrade(data)
-            }
-
-            self.receive()
-        }
-    }
-
-    private func handleUpgrade(_ data: Data) {
-        headerBuffer.append(data)
-        guard headerBuffer.count <= Self.maxHTTPHeaderBytes else {
-            connection.cancel()
-            return
-        }
-        let terminator = Data([13, 10, 13, 10])
-        guard let headerEnd = headerBuffer.range(of: terminator) else { return }
-        let requestData = headerBuffer[..<headerEnd.upperBound]
-        let remainder = Data(headerBuffer[headerEnd.upperBound...])
-
-        switch upgradeHandler.handle(requestData: Data(requestData)) {
-        case .accept(let response):
-            upgraded = true
-            send(response)
-            onUpgraded(self)
-            if !remainder.isEmpty {
-                handleFrames(remainder)
-            }
-        case .reject(let response):
-            onRejected(connection.endpoint)
-            send(response)
-            connection.cancel()
-        }
-        headerBuffer.removeAll(keepingCapacity: false)
-    }
-
-    private func handleFrames(_ data: Data) {
-        frameBuffer.append(data)
-
-        while true {
-            switch WebSocketFrameCodec.decode(from: frameBuffer) {
-            case .frame(let frame, let consumed):
-                frameBuffer.removeFirst(consumed)
-                handle(frame)
-            case .incomplete:
-                return
-            case .oversized:
-                sendClose(code: 1009)
-                connection.cancel()
-                return
-            case .protocolError:
-                sendClose(code: 1002)
-                connection.cancel()
-                return
-            }
-        }
-    }
-
-    private func handle(_ frame: WebSocketFrame) {
-        switch frame.opcode {
-        case .text:
-            if isRateLimited() {
-                let response = buildRateLimitResponse(for: frame.payload)
-                send(WebSocketFrameCodec.encode(WebSocketFrame(opcode: .text, payload: response)))
-                return
-            }
-
-            // Bind the identity before spawning async work so in-flight requests
-            // keep the original client ID even after this client is replaced.
-            let context = OutputRequestContext(clientID: id)
-            let payload = frame.payload
-            let dispatcher = dispatcher
-            Task {
-                let response = await dispatcher.dispatch(payload, context: context)
-                send(WebSocketFrameCodec.encode(WebSocketFrame(opcode: .text, payload: response)))
-            }
-        case .ping:
-            send(WebSocketFrameCodec.encode(WebSocketFrame(opcode: .pong, payload: frame.payload)))
-        case .close:
-            sendClose(code: 1000)
-            connection.cancel()
-        default:
-            break
-        }
-    }
-
-    private func isRateLimited() -> Bool {
-        let now = Date()
-        if now.timeIntervalSince(windowStart) >= 1.0 {
-            requestCount = 0
-            windowStart = now
-        }
-        requestCount += 1
-        return requestCount > 60
-    }
-
-    private func buildRateLimitResponse(for payload: Data) -> Data {
-        struct ErrorResponse: Encodable {
-            let jsonrpc = "2.0"
-            let id: JSONValue
-            let error: ErrorPayload
-        }
-        struct ErrorPayload: Encodable {
-            let code = -32006
-            let message = "Rate limit exceeded"
-        }
-
-        let recoveredId: JSONValue
-        if let raw = try? JSONDecoder().decode(JSONValue.self, from: payload),
-           let object = raw.object {
-            switch object["id"] {
-            case .string(let value): recoveredId = .string(value)
-            case .int(let value): recoveredId = .int(value)
-            default: recoveredId = .null
-            }
-        } else {
-            recoveredId = .null
-        }
-
-        return (try? JSONEncoder().encode(ErrorResponse(id: recoveredId, error: ErrorPayload()))) ?? Data()
-    }
-
-    private func sendClose(code: UInt16) {
-        let payload = Data([UInt8((code >> 8) & 0xff), UInt8(code & 0xff)])
-        send(WebSocketFrameCodec.encode(WebSocketFrame(opcode: .close, payload: payload)))
-    }
 }

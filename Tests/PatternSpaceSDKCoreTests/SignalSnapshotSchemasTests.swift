@@ -4,7 +4,7 @@ import PatternSpaceSDKCore
 
 @Suite struct SignalSnapshotSchemasTests {
     @Test func minorSDKReleaseRetainsProtocolVersion() {
-        #expect(PatternSpaceProtocolMetadata.sdkVersion == "1.1.0")
+        #expect(PatternSpaceProtocolMetadata.sdkVersion == "1.2.0")
         #expect(PatternSpaceProtocolMetadata.protocolVersion == "1.3")
     }
 
